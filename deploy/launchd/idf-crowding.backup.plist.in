@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Render with deploy/README.md, then copy to ~/Library/LaunchAgents/. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>idf-crowding.backup</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>@REPO@/scripts/backup_live.sh</string>
+    </array>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>@PATH@</string>
+    </dict>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>3</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>@REPO@/logs/backup.log</string>
+    <key>StandardErrorPath</key>
+    <string>@REPO@/logs/backup.log</string>
+</dict>
+</plist>

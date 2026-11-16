@@ -26,7 +26,7 @@ _Avoid_: crowding, occupancy
 How crowded a journey from one station to another is at a given time (out of scope; needs origin–destination data).
 
 **Counting point**:
-The unit the validation data reports entries for; the domain's "station". Exact granularity to be confirmed in the validation documentation (source #3).
+The unit the validation data reports entries for; the domain's "station". It is a ZdC (zone de correspondance) of the IDFM stop reference, which can group several operator stop codes at one location (e.g. RATP metro + RER + SNCF); entries from the street only (see `docs/data-quality.md`).
 _Avoid_: stop, arrêt, platform
 
 **Place**:
@@ -41,7 +41,14 @@ Hour-by-hour **Crowding score** for a specific future date (up to ~60 days ahead
 _Avoid_: prediction for past dates
 
 **Day type**:
-The category of day that hourly profiles are averaged over (exact categories to be confirmed in the validation documentation).
+The category of day that hourly profiles are averaged over: JOHV (working day outside school holidays), SAHV (Saturday outside school holidays), JOVS (working day in school holidays), SAVS (Saturday in school holidays), DIJFP (Sunday, public holiday or bridge day).
+
+**Forecast origin**:
+The first day a forecast covers; only data from before it may be used (including features derived from the target, such as the station type). Backtests use monthly origins.
+
+**Network disruption day**:
+A normal day (JOHV or SAHV) whose network total is under 80 % of its usual level: strikes, heavy snow. Left out of model training and scoring.
+_Avoid_: strike day (the cause is not always known)
 
 ## Relationships
 

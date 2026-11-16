@@ -1,0 +1,152 @@
+{
+ "schema_version": 1,
+ "generated_at": "2026-11-11T23:20:07+00:00",
+ "data_period": {
+  "start": "2025-07-01",
+  "end": "2026-06-30"
+ },
+ "bands": [
+  {
+   "band": "quiet",
+   "below": 40.0
+  },
+  {
+   "band": "moderate",
+   "below": 70.0
+  },
+  {
+   "band": "busy",
+   "below": 100.0
+  },
+  {
+   "band": "very_busy",
+   "below": null
+  }
+ ],
+ "places": [
+  {
+   "id": "71264",
+   "name": "Châtelet – Les Halles",
+   "town": "Paris 4e",
+   "lat": 48.858349,
+   "lon": 2.348484,
+   "lines": [
+    {
+     "id": "C01371",
+     "name": "1",
+     "kind": "metro",
+     "color": "#ffbe00",
+     "text_color": "#000000"
+    },
+    {
+     "id": "C01374",
+     "name": "4",
+     "kind": "metro",
+     "color": "#a0006e",
+     "text_color": "#ffffff"
+    },
+    {
+     "id": "C01377",
+     "name": "7",
+     "kind": "metro",
+     "color": "#ff82b4",
+     "text_color": "#000000"
+    },
+    {
+     "id": "C01381",
+     "name": "11",
+     "kind": "metro",
+     "color": "#6e491e",
+     "text_color": "#ffffff"
+    },
+    {
+     "id": "C01384",
+     "name": "14",
+     "kind": "metro",
+     "color": "#640082",
+     "text_color": "#ffffff"
+    },
+    {
+     "id": "C01742",
+     "name": "A",
+     "kind": "rer",
+     "color": "#eb2132",
+     "text_color": "#ffffff"
+    },
+    {
+     "id": "C01743",
+     "name": "B",
+     "kind": "rer",
+     "color": "#5091cb",
+     "text_color": "#ffffff"
+    },
+    {
+     "id": "C01728",
+     "name": "D",
+     "kind": "rer",
+     "color": "#008b5b",
+     "text_color": "#ffffff"
+    }
+   ],
+   "weekday_entries": 152340
+  },
+  {
+   "id": "71410",
+   "name": "Gare du Nord",
+   "town": "Paris 10e",
+   "lat": 48.880953,
+   "lon": 2.355687,
+   "lines": [
+    {
+     "id": "C01374",
+     "name": "4",
+     "kind": "metro",
+     "color": "#a0006e",
+     "text_color": "#ffffff"
+    },
+    {
+     "id": "C01375",
+     "name": "5",
+     "kind": "metro",
+     "color": "#ff5a00",
+     "text_color": "#000000"
+    },
+    {
+     "id": "C01743",
+     "name": "B",
+     "kind": "rer",
+     "color": "#5091cb",
+     "text_color": "#ffffff"
+    },
+    {
+     "id": "C01728",
+     "name": "D",
+     "kind": "rer",
+     "color": "#008b5b",
+     "text_color": "#ffffff"
+    },
+    {
+     "id": "C01737",
+     "name": "H",
+     "kind": "transilien",
+     "color": "#84653d",
+     "text_color": "#ffffff"
+    },
+    {
+     "id": "C01738",
+     "name": "K",
+     "kind": "transilien",
+     "color": "#9b9842",
+     "text_color": "#ffffff"
+    }
+   ],
+   "weekday_entries": 166019
+  }
+ ],
+ "attribution": {
+  "source": "Île-de-France Mobilités",
+  "source_url": "https://data.iledefrance-mobilites.fr",
+  "license": "ODbL",
+  "license_url": "https://opendatacommons.org/licenses/odbl/1-0/"
+ }
+}

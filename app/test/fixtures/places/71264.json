@@ -1,0 +1,931 @@
+{
+ "schema_version": 1,
+ "generated_at": "2026-11-11T23:20:07+00:00",
+ "data_period": {
+  "start": "2025-07-01",
+  "end": "2026-06-30"
+ },
+ "profile_periods": [
+  "2025Q3",
+  "2025Q4",
+  "2026Q1",
+  "2026Q2"
+ ],
+ "place": {
+  "id": "71264",
+  "name": "Châtelet – Les Halles",
+  "town": "Paris 4e",
+  "lat": 48.858349,
+  "lon": 2.348484,
+  "station_ids": [
+   71264
+  ],
+  "lines": [
+   {
+    "id": "C01371",
+    "name": "1",
+    "kind": "metro",
+    "color": "#ffbe00",
+    "text_color": "#000000"
+   },
+   {
+    "id": "C01374",
+    "name": "4",
+    "kind": "metro",
+    "color": "#a0006e",
+    "text_color": "#ffffff"
+   },
+   {
+    "id": "C01377",
+    "name": "7",
+    "kind": "metro",
+    "color": "#ff82b4",
+    "text_color": "#000000"
+   },
+   {
+    "id": "C01381",
+    "name": "11",
+    "kind": "metro",
+    "color": "#6e491e",
+    "text_color": "#ffffff"
+   },
+   {
+    "id": "C01384",
+    "name": "14",
+    "kind": "metro",
+    "color": "#640082",
+    "text_color": "#ffffff"
+   },
+   {
+    "id": "C01742",
+    "name": "A",
+    "kind": "rer",
+    "color": "#eb2132",
+    "text_color": "#ffffff"
+   },
+   {
+    "id": "C01743",
+    "name": "B",
+    "kind": "rer",
+    "color": "#5091cb",
+    "text_color": "#ffffff"
+   },
+   {
+    "id": "C01728",
+    "name": "D",
+    "kind": "rer",
+    "color": "#008b5b",
+    "text_color": "#ffffff"
+   }
+  ]
+ },
+ "reference_level": 17915.0,
+ "day_types": {
+  "JOHV": {
+   "hours": [
+    {
+     "h": 4,
+     "expected_entries": 54,
+     "score": 0,
+     "band": "quiet"
+    },
+    {
+     "h": 5,
+     "expected_entries": 575,
+     "score": 3,
+     "band": "quiet"
+    },
+    {
+     "h": 6,
+     "expected_entries": 881,
+     "score": 5,
+     "band": "quiet"
+    },
+    {
+     "h": 7,
+     "expected_entries": 2379,
+     "score": 13,
+     "band": "quiet"
+    },
+    {
+     "h": 8,
+     "expected_entries": 4783,
+     "score": 27,
+     "band": "quiet"
+    },
+    {
+     "h": 9,
+     "expected_entries": 3820,
+     "score": 21,
+     "band": "quiet"
+    },
+    {
+     "h": 10,
+     "expected_entries": 3281,
+     "score": 18,
+     "band": "quiet"
+    },
+    {
+     "h": 11,
+     "expected_entries": 4296,
+     "score": 24,
+     "band": "quiet"
+    },
+    {
+     "h": 12,
+     "expected_entries": 5939,
+     "score": 33,
+     "band": "quiet"
+    },
+    {
+     "h": 13,
+     "expected_entries": 7349,
+     "score": 41,
+     "band": "moderate"
+    },
+    {
+     "h": 14,
+     "expected_entries": 7920,
+     "score": 44,
+     "band": "moderate"
+    },
+    {
+     "h": 15,
+     "expected_entries": 9908,
+     "score": 55,
+     "band": "moderate"
+    },
+    {
+     "h": 16,
+     "expected_entries": 12706,
+     "score": 71,
+     "band": "busy"
+    },
+    {
+     "h": 17,
+     "expected_entries": 17500,
+     "score": 98,
+     "band": "busy"
+    },
+    {
+     "h": 18,
+     "expected_entries": 19239,
+     "score": 107,
+     "band": "very_busy"
+    },
+    {
+     "h": 19,
+     "expected_entries": 15396,
+     "score": 86,
+     "band": "busy"
+    },
+    {
+     "h": 20,
+     "expected_entries": 10787,
+     "score": 60,
+     "band": "moderate"
+    },
+    {
+     "h": 21,
+     "expected_entries": 8361,
+     "score": 47,
+     "band": "moderate"
+    },
+    {
+     "h": 22,
+     "expected_entries": 7664,
+     "score": 43,
+     "band": "moderate"
+    },
+    {
+     "h": 23,
+     "expected_entries": 6059,
+     "score": 34,
+     "band": "quiet"
+    },
+    {
+     "h": 0,
+     "expected_entries": 3100,
+     "score": 17,
+     "band": "quiet"
+    },
+    {
+     "h": 1,
+     "expected_entries": 339,
+     "score": 2,
+     "band": "quiet"
+    },
+    {
+     "h": 2,
+     "expected_entries": 4,
+     "score": 0,
+     "band": "quiet"
+    },
+    {
+     "h": 3,
+     "expected_entries": 1,
+     "score": 0,
+     "band": "quiet"
+    }
+   ],
+   "daily_entries": 152340,
+   "n_days": 171,
+   "low_confidence": false,
+   "best_slots": {
+    "quietest": [
+     6,
+     7,
+     10
+    ],
+    "around_peaks": [
+     {
+      "peak": 8,
+      "alternative": 6
+     },
+     {
+      "peak": 18,
+      "alternative": 20
+     }
+    ]
+   }
+  },
+  "JOVS": {
+   "hours": [
+    {
+     "h": 4,
+     "expected_entries": 24,
+     "score": 0,
+     "band": "quiet"
+    },
+    {
+     "h": 5,
+     "expected_entries": 565,
+     "score": 3,
+     "band": "quiet"
+    },
+    {
+     "h": 6,
+     "expected_entries": 843,
+     "score": 5,
+     "band": "quiet"
+    },
+    {
+     "h": 7,
+     "expected_entries": 1824,
+     "score": 10,
+     "band": "quiet"
+    },
+    {
+     "h": 8,
+     "expected_entries": 3715,
+     "score": 21,
+     "band": "quiet"
+    },
+    {
+     "h": 9,
+     "expected_entries": 3295,
+     "score": 18,
+     "band": "quiet"
+    },
+    {
+     "h": 10,
+     "expected_entries": 2958,
+     "score": 17,
+     "band": "quiet"
+    },
+    {
+     "h": 11,
+     "expected_entries": 3972,
+     "score": 22,
+     "band": "quiet"
+    },
+    {
+     "h": 12,
+     "expected_entries": 5299,
+     "score": 30,
+     "band": "quiet"
+    },
+    {
+     "h": 13,
+     "expected_entries": 6791,
+     "score": 38,
+     "band": "quiet"
+    },
+    {
+     "h": 14,
+     "expected_entries": 7933,
+     "score": 44,
+     "band": "moderate"
+    },
+    {
+     "h": 15,
+     "expected_entries": 10115,
+     "score": 56,
+     "band": "moderate"
+    },
+    {
+     "h": 16,
+     "expected_entries": 12997,
+     "score": 73,
+     "band": "busy"
+    },
+    {
+     "h": 17,
+     "expected_entries": 17050,
+     "score": 95,
+     "band": "busy"
+    },
+    {
+     "h": 18,
+     "expected_entries": 18217,
+     "score": 102,
+     "band": "very_busy"
+    },
+    {
+     "h": 19,
+     "expected_entries": 14421,
+     "score": 80,
+     "band": "busy"
+    },
+    {
+     "h": 20,
+     "expected_entries": 10255,
+     "score": 57,
+     "band": "moderate"
+    },
+    {
+     "h": 21,
+     "expected_entries": 8007,
+     "score": 45,
+     "band": "moderate"
+    },
+    {
+     "h": 22,
+     "expected_entries": 7249,
+     "score": 40,
+     "band": "moderate"
+    },
+    {
+     "h": 23,
+     "expected_entries": 5460,
+     "score": 30,
+     "band": "quiet"
+    },
+    {
+     "h": 0,
+     "expected_entries": 2638,
+     "score": 15,
+     "band": "quiet"
+    },
+    {
+     "h": 1,
+     "expected_entries": 260,
+     "score": 1,
+     "band": "quiet"
+    },
+    {
+     "h": 2,
+     "expected_entries": 4,
+     "score": 0,
+     "band": "quiet"
+    },
+    {
+     "h": 3,
+     "expected_entries": 0,
+     "score": 0,
+     "band": "quiet"
+    }
+   ],
+   "daily_entries": 143891,
+   "n_days": 73,
+   "low_confidence": false,
+   "best_slots": {
+    "quietest": [
+     6,
+     7,
+     10
+    ],
+    "around_peaks": [
+     {
+      "peak": 11,
+      "alternative": 10
+     },
+     {
+      "peak": 18,
+      "alternative": 20
+     }
+    ]
+   }
+  },
+  "SAHV": {
+   "hours": [
+    {
+     "h": 4,
+     "expected_entries": 18,
+     "score": 0,
+     "band": "quiet"
+    },
+    {
+     "h": 5,
+     "expected_entries": 789,
+     "score": 4,
+     "band": "quiet"
+    },
+    {
+     "h": 6,
+     "expected_entries": 658,
+     "score": 4,
+     "band": "quiet"
+    },
+    {
+     "h": 7,
+     "expected_entries": 1011,
+     "score": 6,
+     "band": "quiet"
+    },
+    {
+     "h": 8,
+     "expected_entries": 1477,
+     "score": 8,
+     "band": "quiet"
+    },
+    {
+     "h": 9,
+     "expected_entries": 2113,
+     "score": 12,
+     "band": "quiet"
+    },
+    {
+     "h": 10,
+     "expected_entries": 3179,
+     "score": 18,
+     "band": "quiet"
+    },
+    {
+     "h": 11,
+     "expected_entries": 5047,
+     "score": 28,
+     "band": "quiet"
+    },
+    {
+     "h": 12,
+     "expected_entries": 6986,
+     "score": 39,
+     "band": "quiet"
+    },
+    {
+     "h": 13,
+     "expected_entries": 8709,
+     "score": 49,
+     "band": "moderate"
+    },
+    {
+     "h": 14,
+     "expected_entries": 10956,
+     "score": 61,
+     "band": "moderate"
+    },
+    {
+     "h": 15,
+     "expected_entries": 14504,
+     "score": 81,
+     "band": "busy"
+    },
+    {
+     "h": 16,
+     "expected_entries": 17862,
+     "score": 100,
+     "band": "busy"
+    },
+    {
+     "h": 17,
+     "expected_entries": 20665,
+     "score": 115,
+     "band": "very_busy"
+    },
+    {
+     "h": 18,
+     "expected_entries": 21413,
+     "score": 120,
+     "band": "very_busy"
+    },
+    {
+     "h": 19,
+     "expected_entries": 18336,
+     "score": 102,
+     "band": "very_busy"
+    },
+    {
+     "h": 20,
+     "expected_entries": 13385,
+     "score": 75,
+     "band": "busy"
+    },
+    {
+     "h": 21,
+     "expected_entries": 9868,
+     "score": 55,
+     "band": "moderate"
+    },
+    {
+     "h": 22,
+     "expected_entries": 8772,
+     "score": 49,
+     "band": "moderate"
+    },
+    {
+     "h": 23,
+     "expected_entries": 8436,
+     "score": 47,
+     "band": "moderate"
+    },
+    {
+     "h": 0,
+     "expected_entries": 6057,
+     "score": 34,
+     "band": "quiet"
+    },
+    {
+     "h": 1,
+     "expected_entries": 1621,
+     "score": 9,
+     "band": "quiet"
+    },
+    {
+     "h": 2,
+     "expected_entries": 16,
+     "score": 0,
+     "band": "quiet"
+    },
+    {
+     "h": 3,
+     "expected_entries": 1,
+     "score": 0,
+     "band": "quiet"
+    }
+   ],
+   "daily_entries": 181877,
+   "n_days": 30,
+   "low_confidence": false,
+   "best_slots": {
+    "quietest": [
+     6,
+     7,
+     8
+    ],
+    "around_peaks": [
+     {
+      "peak": 11,
+      "alternative": 9
+     },
+     {
+      "peak": 18,
+      "alternative": 20
+     }
+    ]
+   }
+  },
+  "SAVS": {
+   "hours": [
+    {
+     "h": 4,
+     "expected_entries": 22,
+     "score": 0,
+     "band": "quiet"
+    },
+    {
+     "h": 5,
+     "expected_entries": 700,
+     "score": 4,
+     "band": "quiet"
+    },
+    {
+     "h": 6,
+     "expected_entries": 618,
+     "score": 3,
+     "band": "quiet"
+    },
+    {
+     "h": 7,
+     "expected_entries": 906,
+     "score": 5,
+     "band": "quiet"
+    },
+    {
+     "h": 8,
+     "expected_entries": 1255,
+     "score": 7,
+     "band": "quiet"
+    },
+    {
+     "h": 9,
+     "expected_entries": 1874,
+     "score": 10,
+     "band": "quiet"
+    },
+    {
+     "h": 10,
+     "expected_entries": 2860,
+     "score": 16,
+     "band": "quiet"
+    },
+    {
+     "h": 11,
+     "expected_entries": 4446,
+     "score": 25,
+     "band": "quiet"
+    },
+    {
+     "h": 12,
+     "expected_entries": 5867,
+     "score": 33,
+     "band": "quiet"
+    },
+    {
+     "h": 13,
+     "expected_entries": 7439,
+     "score": 42,
+     "band": "moderate"
+    },
+    {
+     "h": 14,
+     "expected_entries": 9515,
+     "score": 53,
+     "band": "moderate"
+    },
+    {
+     "h": 15,
+     "expected_entries": 12630,
+     "score": 70,
+     "band": "busy"
+    },
+    {
+     "h": 16,
+     "expected_entries": 15501,
+     "score": 87,
+     "band": "busy"
+    },
+    {
+     "h": 17,
+     "expected_entries": 18138,
+     "score": 101,
+     "band": "very_busy"
+    },
+    {
+     "h": 18,
+     "expected_entries": 18759,
+     "score": 105,
+     "band": "very_busy"
+    },
+    {
+     "h": 19,
+     "expected_entries": 16283,
+     "score": 91,
+     "band": "busy"
+    },
+    {
+     "h": 20,
+     "expected_entries": 12268,
+     "score": 68,
+     "band": "moderate"
+    },
+    {
+     "h": 21,
+     "expected_entries": 8983,
+     "score": 50,
+     "band": "moderate"
+    },
+    {
+     "h": 22,
+     "expected_entries": 7908,
+     "score": 44,
+     "band": "moderate"
+    },
+    {
+     "h": 23,
+     "expected_entries": 7287,
+     "score": 41,
+     "band": "moderate"
+    },
+    {
+     "h": 0,
+     "expected_entries": 4699,
+     "score": 26,
+     "band": "quiet"
+    },
+    {
+     "h": 1,
+     "expected_entries": 1172,
+     "score": 7,
+     "band": "quiet"
+    },
+    {
+     "h": 2,
+     "expected_entries": 11,
+     "score": 0,
+     "band": "quiet"
+    },
+    {
+     "h": 3,
+     "expected_entries": 0,
+     "score": 0,
+     "band": "quiet"
+    }
+   ],
+   "daily_entries": 159141,
+   "n_days": 21,
+   "low_confidence": false,
+   "best_slots": {
+    "quietest": [
+     6,
+     7,
+     8
+    ],
+    "around_peaks": [
+     {
+      "peak": 11,
+      "alternative": 9
+     },
+     {
+      "peak": 18,
+      "alternative": 20
+     }
+    ]
+   }
+  },
+  "DIJFP": {
+   "hours": [
+    {
+     "h": 4,
+     "expected_entries": 20,
+     "score": 0,
+     "band": "quiet"
+    },
+    {
+     "h": 5,
+     "expected_entries": 756,
+     "score": 4,
+     "band": "quiet"
+    },
+    {
+     "h": 6,
+     "expected_entries": 553,
+     "score": 3,
+     "band": "quiet"
+    },
+    {
+     "h": 7,
+     "expected_entries": 828,
+     "score": 5,
+     "band": "quiet"
+    },
+    {
+     "h": 8,
+     "expected_entries": 1265,
+     "score": 7,
+     "band": "quiet"
+    },
+    {
+     "h": 9,
+     "expected_entries": 1661,
+     "score": 9,
+     "band": "quiet"
+    },
+    {
+     "h": 10,
+     "expected_entries": 2302,
+     "score": 13,
+     "band": "quiet"
+    },
+    {
+     "h": 11,
+     "expected_entries": 3575,
+     "score": 20,
+     "band": "quiet"
+    },
+    {
+     "h": 12,
+     "expected_entries": 4767,
+     "score": 27,
+     "band": "quiet"
+    },
+    {
+     "h": 13,
+     "expected_entries": 5810,
+     "score": 32,
+     "band": "quiet"
+    },
+    {
+     "h": 14,
+     "expected_entries": 7534,
+     "score": 42,
+     "band": "moderate"
+    },
+    {
+     "h": 15,
+     "expected_entries": 9752,
+     "score": 54,
+     "band": "moderate"
+    },
+    {
+     "h": 16,
+     "expected_entries": 12033,
+     "score": 67,
+     "band": "moderate"
+    },
+    {
+     "h": 17,
+     "expected_entries": 14000,
+     "score": 78,
+     "band": "busy"
+    },
+    {
+     "h": 18,
+     "expected_entries": 13923,
+     "score": 78,
+     "band": "busy"
+    },
+    {
+     "h": 19,
+     "expected_entries": 12105,
+     "score": 68,
+     "band": "moderate"
+    },
+    {
+     "h": 20,
+     "expected_entries": 8142,
+     "score": 45,
+     "band": "moderate"
+    },
+    {
+     "h": 21,
+     "expected_entries": 5996,
+     "score": 33,
+     "band": "quiet"
+    },
+    {
+     "h": 22,
+     "expected_entries": 4935,
+     "score": 28,
+     "band": "quiet"
+    },
+    {
+     "h": 23,
+     "expected_entries": 3916,
+     "score": 22,
+     "band": "quiet"
+    },
+    {
+     "h": 0,
+     "expected_entries": 2045,
+     "score": 11,
+     "band": "quiet"
+    },
+    {
+     "h": 1,
+     "expected_entries": 371,
+     "score": 2,
+     "band": "quiet"
+    },
+    {
+     "h": 2,
+     "expected_entries": 185,
+     "score": 1,
+     "band": "quiet"
+    },
+    {
+     "h": 3,
+     "expected_entries": 110,
+     "score": 1,
+     "band": "quiet"
+    }
+   ],
+   "daily_entries": 116583,
+   "n_days": 67,
+   "low_confidence": false,
+   "best_slots": {
+    "quietest": [
+     6,
+     7,
+     8
+    ],
+    "around_peaks": [
+     {
+      "peak": 11,
+      "alternative": 9
+     },
+     {
+      "peak": 17,
+      "alternative": 15
+     }
+    ]
+   }
+  }
+ },
+ "attribution": {
+  "source": "Île-de-France Mobilités",
+  "source_url": "https://data.iledefrance-mobilites.fr",
+  "license": "ODbL",
+  "license_url": "https://opendatacommons.org/licenses/odbl/1-0/"
+ }
+}

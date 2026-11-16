@@ -1,0 +1,131 @@
+# Project defaults. Override any key in config.local.toml (git-ignored).
+# Relative paths are resolved against the repository root.
+
+[paths]
+data_dir = "data"
+live_dir = "data/live"   # collected data that can't be re-downloaded: back it up
+app_data_dir = "app/public/data"  # JSON written by `idf-score build` for the static app
+
+[live.disruptions]
+# PRIM "Messages Info Trafic - requête globale" (DATA_SOURCES.md #12).
+url = "https://prim.iledefrance-mobilites.fr/marketplace/disruptions_bulk/disruptions/v2"
+api_key_env = "PRIM_API_KEY"
+# Expected time between polls; the scheduler runs the poll, this is only used to detect gaps.
+# Default PRIM quota for new tokens is 1000 requests/day; 300 s = 288/day.
+interval_seconds = 300
+# A gap is logged when two successful polls are more than gap_factor × interval apart.
+gap_factor = 1.5
+timeout_seconds = 30
+max_attempts = 3
+backoff_seconds = 5
+# `idf-disruptions compact` packs finished days into raw/DATE/snapshots.tar.xz. Set to true
+# (e.g. in config.local.toml) to delete the .json.gz files once the archive is verified.
+delete_after_compact = false
+
+[ingest.idfm]
+# IDFM open data portal, Opendatasoft Explore API v2.1 (DATA_SOURCES.md #1-#4).
+# Dataset IDs checked on the portal catalog API on 2026-11-11.
+base_url = "https://data.iledefrance-mobilites.fr/api/explore/v2.1"
+timeout_seconds = 120
+max_attempts = 3
+backoff_seconds = 5
+
+# Rolling quarterly datasets. Same IDs every year, content replaced each quarter:
+# re-run ingest after each publication to keep every quarter.
+quarterly_datasets = [
+    "validations-reseau-ferre-nombre-validations-par-jour-1er-trimestre",
+    "validations-reseau-ferre-nombre-validations-par-jour-2eme-trimestre",
+    "validations-reseau-ferre-nombre-validations-par-jour-3eme-trimestre",
+    "validations-reseau-ferre-nombre-validations-par-jour-4eme-trimestre",
+    "validations-reseau-ferre-profils-horaires-par-jour-type-1er-trimestre",
+    "validations-reseau-ferre-profils-horaires-par-jour-type-2eme-trimestre",
+    "validations-reseau-ferre-profils-horaires-par-jour-type-3eme-trimestre",
+    "validations-reseau-ferre-profils-horaires-par-jour-type-4eme-trimestre",
+]
+# Stop reference, saved as a dated snapshot. Validation `ida` = ZdC id (zones-de-correspondance).
+# arrets-lignes (stop -> line, mode) and referentiel-des-lignes (line codes, colours):
+# DATA_SOURCES.md #17-#18, checked 2026-11-12, used by `idf-score` for the v0 scope.
+reference_datasets = [
+    "zones-de-correspondance",
+    "zones-d-arrets",
+    "arrets",
+    "arrets-lignes",
+    "referentiel-des-lignes",
+]
+# [dataset id, attachment id]: validation data documentation PDF (source #3).
+attachments = [["histo-validations-reseau-ferre", "donnees_de_validation_pdf"]]
+
+# Yearly zips 2015-2025: dataset id -> name of the file field in its records.
+[ingest.calendar]
+# DATA_SOURCES.md #8 and #9, checked 2026-11-11. Saved as dated snapshots.
+holidays_url = "https://calendrier.api.gouv.fr/jours-feries/metropole.json"
+holidays_license = "not stated on the data.gouv.fr dataservice page (producer DINUM)"
+school_url = "https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets/fr-en-calendrier-scolaire/exports/csv?delimiter=%3B"
+school_license = "Licence Ouverte v2.0 (Etalab)"
+
+[ingest.weather]
+# Open-Meteo historical archive, DATA_SOURCES.md #7, checked 2026-11-11.
+url = "https://archive-api.open-meteo.com/v1/archive"
+latitude = 48.8566   # Paris centre; the API snaps to its nearest grid cell
+longitude = 2.3522
+start_date = "2015-01-01"
+end_lag_days = 2     # the last days come from forecasts and can be revised
+daily = ["precipitation_sum", "snowfall_sum", "precipitation_hours", "temperature_2m_max", "temperature_2m_min"]
+timezone = "Europe/Paris"
+license = "CC BY 4.0 (Open-Meteo.com); free API non-commercial"
+
+[backtest]
+# Phase 5 rolling-origin backtest (models/backtest.py). Time splits only.
+train_start = "2022-01-01"
+n_origins = 12          # monthly origins, the last one with a full horizon in the data
+horizon = 60            # days
+disruption_ratio = 0.8  # JOHV/SAHV days with network_ratio below this are left out
+closure_ratio = 0.4     # station share < this x its trailing 365-day median = closure, left out
+naive_weeks = 4
+daytype_days = 365
+weather_variant = false # also fit LightGBM without weather (2025-26: WAPE 0.094 vs 0.095)
+intervals = true        # option B: conformal + quantile 80 % bands, P(busy day)
+warmup_origins = 12     # extra earlier origins: forecast log that calibrates the intervals
+quantile_rounds = 300
+
+[backtest.lightgbm]
+objective = "tweedie"   # or "log1p"
+num_boost_round = 600
+trend = true            # t_days feature (chosen on 3 origins: WAPE 0.083 -> 0.079)
+half_life_days = 365    # recency weights (with trend: 0.079)
+
+[score]
+# v0 Crowding score, typical week (score/, docs/data-quality.md "Score").
+window_days = 365        # last 12 months of available data
+min_days = 8             # fewer usable days for a day type -> low_confidence
+n_quarters = 4           # hourly profile = mean of the last 4 quarterly profiles
+disruption_ratio = 0.8   # JOHV/SAHV days with network_ratio below this are left out
+reference_quantile = 0.95
+slot_hours = [6, 22]     # best slots start between 06:00 and 21:00
+n_best = 3
+peak_windows = [[6, 12], [15, 21]]
+peak_radius = 2          # "leave earlier/later" hint: quietest hour within ±2 h of a peak
+# Scope: arrets-lignes modes, plus extra line ids from referentiel-des-lignes.
+modes = ["Metro", "RapidTransit"]
+extra_lines = ["C01843"] # T4, counted per stop (validation doc)
+places_file = "places.toml"
+
+# Reference ZdC whose entries the validation data reports under another ZdC: their lines (and
+# scope) go to the data ZdC. Checked on the data labels (docs/data-quality.md "Score").
+[[score.zdc_aliases]]
+from = 474151            # Châtelet - Les Halles (RER A/B/D), no validation rows of its own
+to = 71264               # data ZdC "CHATELET" with labels CHATELET / CHATELET-LES HALLES
+name = "Châtelet – Les Halles"
+
+[[score.zdc_aliases]]
+from = 63284             # Aéroport d'Orly (Terminaux 1-2-3): metro 14, Orlyval
+to = 63278               # data ZdC "AEROPORT ORLY" (stop code remap, Phase 2)
+
+[score.bands]            # upper bound (exclusive) of each band; above busy: very_busy
+quiet = 40
+moderate = 70
+busy = 100
+
+[ingest.idfm.history_datasets]
+histo-validations-reseau-ferre = "reseau_ferre"
+

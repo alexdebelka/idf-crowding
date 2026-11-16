@@ -1,0 +1,9 @@
+# Copy to ~/.config/systemd/user/, replace @REPO@ and @UV@, then:
+#   systemctl --user enable --now idf-disruptions.timer
+[Unit]
+Description=idf-crowding: poll PRIM disruption messages once
+
+[Service]
+Type=oneshot
+WorkingDirectory=@REPO@
+ExecStart=@UV@ run --project @REPO@ idf-disruptions poll

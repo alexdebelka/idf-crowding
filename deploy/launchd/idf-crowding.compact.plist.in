@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Render with deploy/README.md (or scripts/install_launchd.sh compact). Runs once a
+     night, before the backup. Deletes originals only if delete_after_compact = true. -->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>idf-crowding.compact</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>@UV@</string>
+        <string>run</string>
+        <string>--project</string>
+        <string>@REPO@</string>
+        <string>idf-disruptions</string>
+        <string>compact</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>@REPO@</string>
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>1</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>@REPO@/logs/compact.log</string>
+    <key>StandardErrorPath</key>
+    <string>@REPO@/logs/compact.log</string>
+</dict>
+</plist>

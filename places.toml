@@ -1,0 +1,8 @@
+# Place overrides for the app (idf-score build). One Place per Counting point (ZdC) by default.
+# Merge several ZdC into one Place only when they form one physical location; entries are
+# summed, never split by line. Station ids: data/processed/stations.parquet (station_id).
+#
+# [[place]]
+# id = "example-hub"            # lower case, digits, "-"
+# name = "Example hub"
+# station_ids = [11111, 22222]

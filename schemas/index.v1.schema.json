@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/idf-crowding/schemas/index.v1.schema.json",
+  "title": "Place index (schema_version 1)",
+  "description": "app/public/data/index.json, written by `idf-score build`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "data_period", "places", "attribution"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "data_period": {"$ref": "place.v1.schema.json#/$defs/period"},
+    "bands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["band", "below"],
+        "properties": {"band": {"$ref": "place.v1.schema.json#/$defs/band"}, "below": {"type": ["number", "null"]}}
+      }
+    },
+    "places": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "lines"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"},
+          "name": {"type": "string"},
+          "town": {"type": ["string", "null"]},
+          "lat": {"type": ["number", "null"]},
+          "lon": {"type": ["number", "null"]},
+          "weekday_entries": {"type": ["integer", "null"], "description": "Mean daily entries, JOHV"},
+          "lines": {"type": "array", "items": {"$ref": "place.v1.schema.json#/$defs/line"}}
+        }
+      }
+    },
+    "attribution": {"$ref": "place.v1.schema.json#/$defs/attribution"}
+  }
+}

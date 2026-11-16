@@ -1,3 +1,21 @@
 .env
 .DS_Store
 data/
+config.local.toml
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+logs/
+
+# app (Next.js)
+app/node_modules/
+app/.next/
+app/out/
+app/next-env.d.ts
+app/public/data/
+app/test-results/
+app/tsconfig.tsbuildinfo

@@ -18,6 +18,8 @@ to day type x horizon bucket, then horizon bucket, when a group has < MIN_CAL ro
 Busy day: entries above the station's 90th percentile of clean days of the same day
 group over the 365 days before the origin. P(busy) = 1 - CDF of the residuals at
 log1p(threshold) - log1p(pred) (grid 5 % .. 95 %, linear, tails clamped 2.5 / 97.5 %).
+Recalibrated P(busy): isotonic regression of the outcome on P(busy), fitted at each origin
+on the same forecast-log rows as the intervals (earlier origins, dated in the last 365 days).
 """
 
 from __future__ import annotations
@@ -97,20 +99,27 @@ def calibration_rows(log: pl.DataFrame, origin: date) -> pl.DataFrame:
     )
 
 
-def with_scores(df: pl.DataFrame, point: str = "lgbm") -> pl.DataFrame:
+def with_scores(
+    df: pl.DataFrame, point: str = "lgbm", q10: str = "lgbm_q10", q90: str = "lgbm_q90"
+) -> pl.DataFrame:
     ly = pl.col("y").log1p()
     return df.with_columns(
         (ly - pl.col(point).log1p()).alias("r"),
-        pl.max_horizontal(pl.col("lgbm_q10").log1p() - ly, ly - pl.col("lgbm_q90").log1p()).alias(
-            "s_cqr"
-        ),
+        pl.max_horizontal(pl.col(q10).log1p() - ly, ly - pl.col(q90).log1p()).alias("s_cqr"),
     )
 
 
-def conformalize(pred: pl.DataFrame, origins: list[date], point: str = "lgbm") -> pl.DataFrame:
-    """conf_lo/hi, cqr_lo/hi and p_busy for the rows of `origins`, calibrated on the
-    forecast log `pred` (all origins, warm-up included)."""
-    log = with_scores(pred, point)
+def conformalize(
+    pred: pl.DataFrame,
+    origins: list[date],
+    point: str = "lgbm",
+    q10: str = "lgbm_q10",
+    q90: str = "lgbm_q90",
+) -> pl.DataFrame:
+    """conf_lo/hi (around `point`), cqr_lo/hi (around the `q10`/`q90` band) and p_busy for
+    the rows of `origins`, calibrated on the forecast log `pred` (all origins, warm-up
+    included)."""
+    log = with_scores(pred, point, q10, q90)
     parts = []
     for o in origins:
         cal = calibration_rows(log, o)
@@ -120,16 +129,16 @@ def conformalize(pred: pl.DataFrame, origins: list[date], point: str = "lgbm") -
         lp = np.log1p(rows[point].to_numpy())
         lo = np.expm1(lp + r[f"q{LO}"].to_numpy())
         hi = np.expm1(lp + r[f"q{HI}"].to_numpy())
-        q10 = np.log1p(rows["lgbm_q10"].to_numpy())
-        q90 = np.log1p(rows["lgbm_q90"].to_numpy())
+        lq10 = np.log1p(rows[q10].to_numpy())
+        lq90 = np.log1p(rows[q90].to_numpy())
         grid = r.select([f"q{q}" for q in GRID]).to_numpy()
         x = np.log1p(rows["busy_threshold"].to_numpy()) - lp
         parts.append(
             rows.select("origin", "station_id", "date").with_columns(
                 pl.Series("conf_lo", np.clip(lo, 0, None)),
                 pl.Series("conf_hi", hi),
-                pl.Series("cqr_lo", np.clip(np.expm1(q10 - s), 0, None)),
-                pl.Series("cqr_hi", np.expm1(q90 + s)),
+                pl.Series("cqr_lo", np.clip(np.expm1(lq10 - s), 0, None)),
+                pl.Series("cqr_hi", np.expm1(lq90 + s)),
                 pl.Series("p_busy", exceed_prob(x, grid)),
                 pl.lit(cal.height).alias("n_cal"),
             )
@@ -198,12 +207,37 @@ def interval_table(pred: pl.DataFrame, by: list[str]) -> pl.DataFrame:
     return pl.concat(parts, how="diagonal").sort(["method", *(by or ["group"])])
 
 
-def _busy(pred: pl.DataFrame) -> pl.DataFrame:
+def _busy(pred: pl.DataFrame, p: str = "p_busy") -> pl.DataFrame:
     return pred.filter(
-        pl.col("p_busy").is_not_null()
-        & pl.col("p_busy").is_not_nan()
-        & pl.col("busy_threshold").is_not_null()
-    ).with_columns((pl.col("y") > pl.col("busy_threshold")).cast(pl.Float64).alias("busy"))
+        pl.col(p).is_not_null() & pl.col(p).is_not_nan() & pl.col("busy_threshold").is_not_null()
+    ).with_columns(
+        pl.col(p).alias("p_busy"),
+        (pl.col("y") > pl.col("busy_threshold")).cast(pl.Float64).alias("busy"),
+    )
+
+
+def recalibrate_busy(pred: pl.DataFrame, origins: list[date], p: str = "p_busy") -> pl.DataFrame:
+    """origin, station_id, date, p_busy_iso for the rows of `origins`. The isotonic mapping
+    used at origin o is fitted on (p, outcome) of `calibration_rows(pred, o)` only: earlier
+    origins, clean days dated in [o - 365 d, o), whose outcomes are known at o."""
+    from sklearn.isotonic import IsotonicRegression
+
+    hist = _busy(pred, p)
+    parts = []
+    for o in origins:
+        cal = calibration_rows(hist, o)
+        rows = pred.filter(pl.col("origin") == o)
+        x = rows[p].to_numpy().astype(float)
+        out = np.full(len(x), np.nan)
+        if cal.height >= MIN_CAL:
+            iso = IsotonicRegression(y_min=0.0, y_max=1.0, out_of_bounds="clip")
+            iso.fit(cal["p_busy"].to_numpy(), cal["busy"].to_numpy())
+            ok = ~np.isnan(x)
+            out[ok] = iso.predict(x[ok])
+        parts.append(
+            rows.select("origin", "station_id", "date").with_columns(pl.Series("p_busy_iso", out))
+        )
+    return pl.concat(parts)
 
 
 def busy_scores(pred: pl.DataFrame) -> dict[str, float]:

@@ -1,4 +1,4 @@
-.PHONY: setup test lint format check poll status compact backup ingest ingest-plan clean features backtest deep-export deep-score score
+.PHONY: setup test lint format check poll status compact backup ingest ingest-plan clean features backtest deep-export deep-export-warmup deep-score score
 
 setup:
 	uv sync
@@ -56,6 +56,10 @@ score:
 # then scoring of their forecasts against lgbm
 deep-export:
 	uv run idf-deep export
+
+# Also the warm-up origins (forecast log for the ensemble's calibrated intervals)
+deep-export-warmup:
+	uv run idf-deep export --warmup
 
 deep-score:
 	uv run idf-deep score

@@ -101,3 +101,60 @@ def test_score_against_lgbm(tmp_path):
     assert w["lgbm"] == np.float64(40 / 400)
     assert w["ens_lgbm_nhits"] == np.float64(20 / 400)
     assert (tmp_path / "backtest/deep/report.md").exists()
+
+
+def test_export_plan_warmup_before_scored():
+    cfg = small_cfg()
+    last = date(2026, 6, 30)
+    warm, scored = bt.all_origins(last, cfg)
+    plan = deep.export_plan(last, cfg, warmup=True)
+    assert [o for o, _ in plan] == warm + scored
+    assert [r for _, r in plan] == ["warmup"] * len(warm) + ["scored"] * len(scored)
+    assert all(w < scored[0] for w in warm)
+    assert deep.export_plan(last, cfg, warmup=False) == [(o, "scored") for o in scored]
+
+
+def test_seed_models():
+    ms = ["nhits", "tft", "tft_s2", "tft_s10", "tftx", "ens_lgbm_tft"]
+    assert deep.seed_models(ms) == ["tft", "tft_s10", "tft_s2"]
+
+
+def _busy_log(seed=0):
+    """Three monthly origins, 60-day horizons, 5 stations; p_busy noisy but informative."""
+    rng = np.random.default_rng(seed)
+    rows = []
+    for o in [date(2025, 1, 1), date(2025, 2, 1), date(2025, 3, 1)]:
+        for st in range(5):
+            for h in range(60):
+                p = rng.uniform()
+                rows.append(
+                    {
+                        "origin": o,
+                        "station_id": st,
+                        "date": o + timedelta(days=h),
+                        "scored": True,
+                        "p_busy": p,
+                        "busy_threshold": 100.0,
+                        "y": 150.0 if rng.uniform() < p**2 else 50.0,
+                    }
+                )
+    return pl.DataFrame(rows)
+
+
+def test_recalibrate_busy_uses_only_earlier_outcomes(monkeypatch):
+    from idf_crowding.models import intervals
+
+    monkeypatch.setattr(intervals, "MIN_CAL", 20)
+    o = date(2025, 3, 1)
+    log = _busy_log()
+    a = intervals.recalibrate_busy(log, [o])
+    assert a["p_busy_iso"].is_not_nan().all()
+    # flip every outcome dated on or after the origin (its own rows and earlier origins')
+    flipped = log.with_columns(
+        pl.when(pl.col("date") >= o).then(200.0 - pl.col("y")).otherwise(pl.col("y")).alias("y")
+    )
+    b = intervals.recalibrate_busy(flipped, [o])
+    assert a.equals(b)
+    # but earlier outcomes do matter
+    c = intervals.recalibrate_busy(log.with_columns(pl.lit(150.0).alias("y")), [o])
+    assert not a.equals(c)

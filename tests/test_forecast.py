@@ -179,3 +179,30 @@ def test_combine_special_days_use_lgbm_times_factor(monkeypatch):
     # switched off: the ensemble everywhere
     raw = fx.combine_frames(lg, tft, both, both, c, special=False)
     assert raw["model"].unique().to_list() == ["lgbm+tft"]
+
+
+def test_combine_keeps_growth_columns(monkeypatch):
+    from idf_crowding.models import growth
+
+    monkeypatch.setattr(intervals, "MIN_CAL", 50)
+    c = date(2025, 3, 1)
+    lg = pl.DataFrame(
+        {
+            "station_id": [1],
+            "date": [c + timedelta(days=5)],
+            "lgbm": [100.0],
+            "horizon": [1],
+            "horizon_bucket": ["1-7"],
+            "days_since_data": [6],
+            "day_type": ["JOHV"],
+            "station_type": ["mixed"],
+            "weather_source": ["observed"],
+        }
+    )
+    rates = pl.DataFrame({"cls": ["wk", "sat", "sun"], "g": [1.5, 1.5, 1.5]})
+    lg = growth.apply(lg, rates, c)
+    tft = pl.DataFrame({"station_id": [1], "date": [c + timedelta(days=5)], "tft": [120.0]})
+    log = log_rows(date(2025, 1, 1), 400, 0.1).with_columns(pl.col("lgbm").alias("ens"))
+    r = fx.combine_frames(lg, tft, log, log, c).row(0, named=True)
+    assert r["lgbm_raw"] == 100.0 and r["growth"] == pytest.approx(1.5 ** (5 / 364))
+    assert r["point"] == pytest.approx((r["lgbm"] + 120.0) / 2)

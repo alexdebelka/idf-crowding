@@ -22,6 +22,10 @@ climatology (models/weather.py); `short_pass_share` and station types are frozen
 Bands: conformal, from the residuals of the production-like backtest (lag 120, production
 weather) dated in the 365 days before c, by day type x station type x horizon bucket
 (horizon = days since the issue date). No P(busy) (not calibrated well enough).
+Growth (models/growth.py): LightGBM × the year-on-year growth of its weekday class projected
+from the cutoff (trees do not extrapolate the trend over the publication lag), in the
+production rows and in the calibration log (each origin at its own cutoff); `lgbm` is the
+corrected value, `lgbm_raw` the model output.
 Special days (Dec 24, 25, 31, Jan 1; models/special_days.py): lgbm x a per-station factor
 learned from the same forecast log (outcomes before c), point and band; columns
 `special_day` and `adjust`.
@@ -49,7 +53,7 @@ from idf_crowding.features.calendar import (
 )
 from idf_crowding.features.weather import load_weather
 from idf_crowding.models import backtest as bt
-from idf_crowding.models import gbm, intervals
+from idf_crowding.models import gbm, growth, intervals
 from idf_crowding.models import special_days as sd
 from idf_crowding.models import weather as wx
 from idf_crowding.models.frozen import apply_frozen
@@ -63,6 +67,7 @@ class ForecastConfig:
     active_days: int = 28  # forecast stations with a clean day in the last active_days
     calib_lag: int = 120  # backtest variant whose forecast log calibrates the bands
     calib_deep_dir: str = "deep_colab/lag120_prod/outputs"  # TFT outputs of that variant
+    growth_window: int = 182  # LightGBM growth extrapolation (models/growth.py); 0 = off
 
     @classmethod
     def from_config(cls) -> ForecastConfig:
@@ -292,12 +297,20 @@ def calibration_log(
         [pl.read_parquet(bt.origin_dir(bp, o, vcfg) / "predictions.parquet") for o in origins],
         how="diagonal",
     )
+    feats = pl.scan_parquet(paths.processed / "features_daily.parquet")
+    if fcfg.growth_window:
+        lg = growth.apply_log(lg, feats, fcfg.growth_window)
     if not with_deep:
         return lg, None
     fc = deep.load_forecasts(paths.processed.parent / fcfg.calib_deep_dir)
     seeds = deep.seed_models(sorted(fc["model"].unique()))
     fc = deep.seed_average(fc, seeds)
-    return lg, deep.ensemble_log(bp, fc, origins, "tft_seedavg", vcfg)
+    ens = deep.ensemble_log(bp, fc, origins, "tft_seedavg", vcfg)
+    if fcfg.growth_window:
+        ens = growth.apply_log(ens, feats, fcfg.growth_window).with_columns(
+            ((pl.col("lgbm") + pl.col("tft_seedavg")) / 2).alias("ens")
+        )
+    return lg, ens
 
 
 def band(rows: pl.DataFrame, log: pl.DataFrame, point: str, cutoff: date) -> pl.DataFrame:
@@ -384,6 +397,7 @@ def combine_frames(
         "n_cal",
         "special_day",
         "adjust",
+        *[c for c in ("lgbm_raw", "growth") if c in out.columns],
     ).sort("station_id", "date")
 
 
@@ -417,6 +431,12 @@ def run_combine(
             raise ValueError(f"no TFT forecasts for cutoff {c} in {deep_dir}")
         seeds = deep.seed_models(sorted(fc["model"].unique()))
         tft = deep.seed_average(fc, seeds).select("station_id", "date", pl.col("q50").alias("tft"))
+    rates = None
+    if fcfg.growth_window:
+        rates = growth.growth_rates(
+            pl.scan_parquet(paths.processed / "features_daily.parquet"), c, fcfg.growth_window
+        )
+        lg = growth.apply(lg, rates, c)
     lgbm_log, ens_log = calibration_log(paths, fcfg, tft is not None)
     first_seen = (
         pl.scan_parquet(paths.processed / "features_daily.parquet")
@@ -436,6 +456,7 @@ def run_combine(
             "models": out.group_by("model").len().sort("model").rows(),
             "calibration": f"backtest variant lag{fcfg.calib_lag}_prod, residuals dated in the "
             "365 days before the cutoff",
+            "growth": None if rates is None else dict(rates.iter_rows()),
         }
     )
     (d / "forecast_meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")

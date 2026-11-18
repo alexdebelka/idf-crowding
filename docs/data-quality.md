@@ -149,6 +149,7 @@ Decision record: `docs/adr/0002-production-forecast-per-release.md`.
 | Point | mean(LightGBM, TFT seed mean); LightGBM alone for stations without TFT (fewer than 365 clean days) or without `--deep` (`model` column) |
 | 80 % band | Conformal: residual quantiles of the production-like backtest (variant `lag120_prod`: ensemble log for the ensemble, LightGBM log for LightGBM alone) dated in the 365 days before the cutoff, by day type × station type × horizon bucket (horizon = days since the issue date, buckets capped at 29–60) |
 | Not produced | P(busy day) (not calibrated well enough, see Backtest) |
+| Growth | LightGBM × year-on-year growth of its weekday class projected from the cutoff (columns `lgbm`, `lgbm_raw`, `growth`); see "Growth extrapolation" below |
 | Special days | Dec 24, Dec 25, Dec 31, Jan 1: LightGBM × a per-station factor (point and band), not the ensemble; columns `special_day`, `adjust` (1 on other dates); raw `lgbm` / `tft` kept. See "Special days" below |
 
 ### Special days (`models/special_days.py`)
@@ -180,7 +181,15 @@ These 4 dates exceed |log ratio| 0.15 in both years; Dec 26 and Jan 2 do not (De
 
 k = 1 / 4 give 0.132 / 0.133. The ensemble factor overshoots because TFT's Christmas error roughly halved from 2024 to 2025 (not stable); LightGBM's was stable. Only one validation year: re-check after Christmas 2026.
 
-**First production run** (cutoff 2026-07-01): network totals Dec 24 / 25 / 31 / Jan 1 = 4.50 / 2.28 / 3.14 / 2.30 M (before: 5.89 / 3.48 / 5.21 / 3.27), i.e. −1 / −6 / −8 / +17 % vs the same date a year earlier (ordinary weekdays around them: +3 to +8 %). Median factor 0.78–0.90 by date, range 0.14–1.42. Other dates unchanged.
+**First production run** (cutoff 2026-07-01, before the growth correction): network totals Dec 24 / 25 / 31 / Jan 1 = 4.50 / 2.28 / 3.14 / 2.30 M (before: 5.89 / 3.48 / 5.21 / 3.27), i.e. −1 / −6 / −8 / +17 % vs the same date a year earlier (ordinary weekdays around them: +3 to +8 %). Median factor 0.78–0.90 by date, range 0.14–1.42. Other dates unchanged.
+
+### Growth extrapolation (`models/growth.py`)
+- **Finding.** In the lag120_prod backtest every day type is under-forecast at network level (median of origin-dates, ensemble): JOHV −4 %, JOVS −5 %, SAHV −7 %, SAVS −7 %, DIJFP −8 %; Sundays alone −8 % (LightGBM −9 %). The Sunday excess was largest in 2024 – mid 2025 (monthly −10 to −18 %) and small since 2025-09.
+- **Cause.** Weekend traffic grows faster than weekday traffic (711 stations present 2022–2026, school terms, no public holidays): Sunday / weekday 0.45 (2024 H1) → 0.49 (2025 H1) → 0.53 (2026 H1); Saturday / weekday 0.66 → 0.73 → 0.75. Trees do not extrapolate `t_days` past the training data and the data are ~4 months old at the issue date, so faster-growing day types fall further behind.
+- **Rule.** Per weekday class (Mon–Fri, Sat, Sun), at the cutoff c: g = mean daily network total over [c − 182 d, c) / the same over the 182 days 364 d earlier (public holidays and flagged days out; stations with data on ≥ half the days of both windows). LightGBM × g^((date − c) / 364); the ensemble stays mean(corrected LightGBM, TFT) (TFT already follows part of the growth). Applied to the production rows and to the calibration log (each origin at its own cutoff, data before it only), so bands and special-day factors are calibrated on corrected forecasts. `lgbm` = corrected, `lgbm_raw` = model output, `growth` = factor; `[forecast] growth_window = 0` turns it off.
+- **Validation** (rolling, 24 origins, special days out): ensemble WAPE 0.1056 → 0.1014 (origins 2025-06+: 0.0994 → 0.0965); LightGBM 0.1228 → 0.1126; better on 18 / 24 origins; Sunday network bias −8.7 % → −2.6 %. Weak spot: origins 2026-03..05, when weekend growth slowed: ensemble +1 % on average, worst +11 % (projecting last year's growth overshoots when it decelerates). 80 % band coverage unchanged (ensemble 0.810 vs 0.811, LightGBM 0.800 vs 0.805; relative width 0.377 vs 0.384). Special days with the corrected LightGBM: station WAPE 0.133 (0.130 before), network within ±5 %.
+- **Rejected alternatives.** Post-hoc factor per day type from recent residuals (91–365 days): ~1 % WAPE on average but −17 % to +39 % by origin; per station × day type (shrunk): worse (0.110–0.120). LightGBM `linear_tree` (tweedie): diverges (origin 2025-12 WAPE 0.161 → 1.40 with λ 1, 0.40 with λ 1000).
+- **First production run** (cutoff 2026-07-01): g = 1.054 / 1.091 / 1.125 (Mon–Fri / Sat / Sun); factors 1.02–1.07 over the forecast window; network +1.2 % on weekdays, +2.5 % on weekends; Sunday / JOHV 0.520 (0.511 before; 0.506 observed in the same weeks a year earlier). Special days Dec 24 / 25 / 31 / Jan 1: 4.42 / 2.24 / 3.08 / 2.27 M.
 
 ## Score (`idf-score build`, `make score` → `data/processed/typical_week.parquet`, `app/public/data/`)
 v0 **Typical week view**: one **Crowding score** per **Place** × **Day type** × hour. Settings in

@@ -106,6 +106,7 @@ days_max = 225          # forecast to data cutoff + 225 days (~75 d delay + ~90 
 active_days = 28        # stations with a clean day in the last 28 days before the cutoff
 calib_lag = 120         # bands from the backtest variant lag120_prod
 calib_deep_dir = "deep_colab/lag120_prod/outputs"  # its TFT outputs (relative to data_dir)
+growth_window = 182      # LightGBM x year-on-year growth per weekday class over the last 182 days (0 = off)
 
 [score]
 # v0 Crowding score, typical week (score/, docs/data-quality.md "Score").

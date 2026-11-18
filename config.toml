@@ -87,12 +87,25 @@ weather_variant = false # also fit LightGBM without weather (2025-26: WAPE 0.094
 intervals = true        # option B: conformal + quantile 80 % bands, P(busy day)
 warmup_origins = 12     # extra earlier origins: forecast log that calibrates the intervals
 quantile_rounds = 300
+# step 4, production-like variants (idf-backtest --lag N --weather production); results of a
+# variant go to backtest/variants/lagN_obs|prod/. Defaults = the main backtest.
+lag_days = 0            # data cutoff = origin - lag_days (IDFM publishes ~75-165 days late)
+weather_mode = "observed"  # "production": observed for forecast_days, then climatology
+forecast_days = 16
+quantile_models = true  # LightGBM 10/90 % fits for the quantile / cqr bands
 
 [backtest.lightgbm]
 objective = "tweedie"   # or "log1p"
 num_boost_round = 600
 trend = true            # t_days feature (chosen on 3 origins: WAPE 0.083 -> 0.079)
 half_life_days = 365    # recency weights (with trend: 0.079)
+
+[forecast]
+# Production forecast (models/forecast.py, idf-forecast). One fit per IDFM release.
+days_max = 225          # forecast to data cutoff + 225 days (~75 d delay + ~90 d to the next release + 60)
+active_days = 28        # stations with a clean day in the last 28 days before the cutoff
+calib_lag = 120         # bands from the backtest variant lag120_prod
+calib_deep_dir = "deep_colab/lag120_prod/outputs"  # its TFT outputs (relative to data_dir)
 
 [score]
 # v0 Crowding score, typical week (score/, docs/data-quality.md "Score").

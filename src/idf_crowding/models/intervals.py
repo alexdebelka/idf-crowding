@@ -1,9 +1,10 @@
 """Option B: 80 % prediction intervals and busy-day probabilities.
 
-Calibration uses a forecast log, as a deployed forecaster would: at origin o, the
+Calibration uses a forecast log, as a deployed forecaster would: at origin o with data
+cutoff c (c = o, or o - lag with a publication lag; `cutoff` column of the log), the
 calibration set is every earlier forecast (origins before o, `warmup_origins` extra ones
-before the first scored origin) for clean station-days dated in [o - 365 days, o). Those
-forecasts are out-of-sample and their outcomes are known at o; a full year covers every
+before the first scored origin) for clean station-days dated in [c - 365 days, c). Those
+forecasts are out-of-sample and their outcomes are published at o; a full year covers every
 season and day type.
 
 Methods (all on log1p entries, 10 % / 90 %):
@@ -16,7 +17,7 @@ Residual quantiles are taken per day type x station type x horizon bucket, falli
 to day type x horizon bucket, then horizon bucket, when a group has < MIN_CAL rows.
 
 Busy day: entries above the station's 90th percentile of clean days of the same day
-group over the 365 days before the origin. P(busy) = 1 - CDF of the residuals at
+group over the 365 days before the cutoff. P(busy) = 1 - CDF of the residuals at
 log1p(threshold) - log1p(pred) (grid 5 % .. 95 %, linear, tails clamped 2.5 / 97.5 %).
 Recalibrated P(busy): isotonic regression of the outcome on P(busy), fitted at each origin
 on the same forecast-log rows as the intervals (earlier origins, dated in the last 365 days).
@@ -90,23 +91,34 @@ def lookup(rows: pl.DataFrame, cal: pl.DataFrame, score: str, qs: list[float]) -
     return filled
 
 
-def calibration_rows(log: pl.DataFrame, origin: date) -> pl.DataFrame:
-    """Earlier out-of-sample forecasts of clean days dated in [origin - 365 d, origin)."""
+def calibration_rows(log: pl.DataFrame, origin: date, cutoff: date | None = None) -> pl.DataFrame:
+    """Earlier out-of-sample forecasts of clean days dated in [cutoff - 365 d, cutoff)
+    (cutoff = origin when there is no publication lag)."""
+    c = cutoff or origin
     return log.filter(
         (pl.col("origin") < origin)
         & pl.col("scored")
-        & pl.col("date").is_between(origin - timedelta(days=365), origin, closed="left")
+        & pl.col("date").is_between(c - timedelta(days=365), c, closed="left")
     )
+
+
+def cutoff_of(pred: pl.DataFrame, origin: date) -> date:
+    """Data cutoff of an origin: its `cutoff` column when present, else the origin."""
+    if "cutoff" not in pred.columns:
+        return origin
+    c = pred.filter(pl.col("origin") == origin)["cutoff"].drop_nulls()
+    return c[0] if len(c) else origin
 
 
 def with_scores(
     df: pl.DataFrame, point: str = "lgbm", q10: str = "lgbm_q10", q90: str = "lgbm_q90"
 ) -> pl.DataFrame:
     ly = pl.col("y").log1p()
-    return df.with_columns(
-        (ly - pl.col(point).log1p()).alias("r"),
-        pl.max_horizontal(pl.col(q10).log1p() - ly, ly - pl.col(q90).log1p()).alias("s_cqr"),
-    )
+    if q10 in df.columns and q90 in df.columns:
+        s = pl.max_horizontal(pl.col(q10).log1p() - ly, ly - pl.col(q90).log1p())
+    else:  # no quantile models (e.g. lag variants): conformal only
+        s = pl.lit(None, pl.Float64)
+    return df.with_columns((ly - pl.col(point).log1p()).alias("r"), s.alias("s_cqr"))
 
 
 def conformalize(
@@ -118,19 +130,22 @@ def conformalize(
 ) -> pl.DataFrame:
     """conf_lo/hi (around `point`), cqr_lo/hi (around the `q10`/`q90` band) and p_busy for
     the rows of `origins`, calibrated on the forecast log `pred` (all origins, warm-up
-    included)."""
+    included). With a `cutoff` column, origin o is calibrated on rows dated before its cutoff.
+    Without `q10`/`q90` columns the cqr band is null."""
     log = with_scores(pred, point, q10, q90)
+    has_q = q10 in pred.columns and q90 in pred.columns
     parts = []
     for o in origins:
-        cal = calibration_rows(log, o)
+        cal = calibration_rows(log, o, cutoff_of(pred, o))
         rows = pred.filter(pl.col("origin") == o)
         r = lookup(rows, cal, "r", GRID)
-        s = lookup(rows, cal, "s_cqr", [COV])[f"q{COV}"].to_numpy()
+        s = lookup(rows, cal, "s_cqr", [COV])[f"q{COV}"].to_numpy().astype(float)
         lp = np.log1p(rows[point].to_numpy())
         lo = np.expm1(lp + r[f"q{LO}"].to_numpy())
         hi = np.expm1(lp + r[f"q{HI}"].to_numpy())
-        lq10 = np.log1p(rows[q10].to_numpy())
-        lq90 = np.log1p(rows[q90].to_numpy())
+        nan = np.full(rows.height, np.nan)
+        lq10 = np.log1p(rows[q10].to_numpy()) if has_q else nan
+        lq90 = np.log1p(rows[q90].to_numpy()) if has_q else nan
         grid = r.select([f"q{q}" for q in GRID]).to_numpy()
         x = np.log1p(rows["busy_threshold"].to_numpy()) - lp
         parts.append(
@@ -161,7 +176,8 @@ def exceed_prob(x: np.ndarray, grid: np.ndarray) -> np.ndarray:
 def busy_threshold(
     history: pl.DataFrame, targets: pl.DataFrame, origin: date, q: float = 0.9
 ) -> pl.Series:
-    """Station's q-quantile of clean daily entries on the same day group, last 365 days."""
+    """Station's q-quantile of clean daily entries on the same day group, 365 days before
+    `origin` (pass the data cutoff when there is a publication lag)."""
     ref = (
         history.filter(
             pl.col("date").is_between(origin - timedelta(days=365), origin, closed="left")
@@ -202,6 +218,8 @@ def interval_aggs(lo: str, hi: str, alpha: float = 0.2) -> list[pl.Expr]:
 def interval_table(pred: pl.DataFrame, by: list[str]) -> pl.DataFrame:
     parts = []
     for method, lo, hi in METHODS:
+        if lo not in pred.columns or pred[lo].fill_nan(None).is_null().all():
+            continue  # e.g. no quantile models in a lag variant
         t = pred.group_by(by) if by else pred.group_by(pl.lit("all").alias("group"))
         parts.append(t.agg(interval_aggs(lo, hi)).with_columns(pl.lit(method).alias("method")))
     return pl.concat(parts, how="diagonal").sort(["method", *(by or ["group"])])
@@ -218,14 +236,14 @@ def _busy(pred: pl.DataFrame, p: str = "p_busy") -> pl.DataFrame:
 
 def recalibrate_busy(pred: pl.DataFrame, origins: list[date], p: str = "p_busy") -> pl.DataFrame:
     """origin, station_id, date, p_busy_iso for the rows of `origins`. The isotonic mapping
-    used at origin o is fitted on (p, outcome) of `calibration_rows(pred, o)` only: earlier
-    origins, clean days dated in [o - 365 d, o), whose outcomes are known at o."""
+    used at origin o is fitted on (p, outcome) of `calibration_rows(pred, o, cutoff)` only:
+    earlier origins, clean days dated in [c - 365 d, c), whose outcomes are known at o."""
     from sklearn.isotonic import IsotonicRegression
 
     hist = _busy(pred, p)
     parts = []
     for o in origins:
-        cal = calibration_rows(hist, o)
+        cal = calibration_rows(hist, o, cutoff_of(pred, o))
         rows = pred.filter(pl.col("origin") == o)
         x = rows[p].to_numpy().astype(float)
         out = np.full(len(x), np.nan)

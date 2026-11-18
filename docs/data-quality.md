@@ -123,12 +123,64 @@ Rolling origin, time splits only. Rules in `src/idf_crowding/models/`.
 | `lgbm` | One global LightGBM, Tweedie objective, 600 rounds; station id as a dense categorical code; no lags; `t_days` (days since training start) and recency weights 0.5^(age / 365 days) |
 | Metrics | WAPE (main) = Σ\|y − ŷ\| / Σy; MAE; MAPE on station-days with y ≥ 100 (smaller counts make it explode); network level = errors of the daily total of scored stations |
 | Intervals (80 %) | Calibrated on a forecast log: the out-of-sample forecasts of earlier origins (12 extra warm-up origins before the first scored one, not reported) for clean days of the 365 days before the origin. `conformal` = point + empirical quantiles of log1p residuals; `cqr` = LightGBM quantiles (10 %, 90 %, on log1p, 300 rounds) widened by the conformal quantile of max(q10 − y, y − q90) in log space; `quantile` = raw LightGBM quantiles. Groups: day type × station type × horizon bucket, falling back to day type × horizon bucket, then horizon bucket, below 500 rows. Finite-sample conformal levels. Scores: coverage, relative width, Winkler interval score / Σy |
-| Deep models (option C) | `idf-deep export`: per origin, complete daily grid from each station's first clean day; excluded or absent days get `available_mask` = 0 and an interpolated log1p target (inputs only, never scored); future exogenous = calendar, day type, frozen `short_pass_share`, weather z-scored with pre-origin statistics; static = frozen station type and morning share, log mean entries of the last 365 days. Stations with < 365 clean days or none in the last 28 days are left out (LightGBM only). `idf-deep score` uses exactly the LightGBM scored rows |
-| Busy day | Entries above the station's 90th percentile of clean days of the same day group over the 365 days before the origin. P(busy) from the conformal residual distribution (grid 5–95 %, linear CDF, tails clamped at 2.5 / 97.5 %). Scores: Brier, reliability bins |
+| Deep models (option C) | `idf-deep export`: per origin, complete daily grid from each station's first clean day; excluded or absent days get `available_mask` = 0 and an interpolated log1p target (inputs only, never scored); future exogenous = calendar, day type, frozen `short_pass_share`, weather z-scored with pre-origin statistics; static = frozen station type and morning share, log mean entries of the last 365 days. Stations with < 365 clean days or none in the last 28 days are left out (LightGBM only). `idf-deep score` uses exactly the LightGBM scored rows. Lag variants (`--lag N --weather production`): history ends at the cutoff c, future rows c .. origin + 59 (model h = N + 60) with observed calendar and weather on the gap, climatology after day 16; static features and weather z-scores from data before c; the gap rows are never scored. With several seeds that all have the warm-up origins, the ensemble band is calibrated on the seed average |
+| Publication lag (variants) | `--lag N` (`lag_days`): data cutoff c = origin − N days. Everything that the main backtest takes "before the origin" is taken before c instead: training rows, frozen `short_pass_share` and station type / morning share (profile periods ended before c), `naive_4w` (4 weeks before c), `daytype_12m` (365 days before c), busy thresholds, interval calibration rows (earlier origins' forecasts dated in [c − 365, c)). The gap c .. origin − 1 is not forecast; scored dates and exclusion rules are those of the main backtest. `days_since_data` = N + horizon. Results in `backtest/variants/lagN_obs\|prod/`; `idf-backtest summary` compares variants. Lags tried: 75 / 120 / 165 days (IDFM publishes a quarter ~70–76 days after it ends, so the last data day is 75–165 days old at issue time) |
+| Production weather (variants) | `--weather production`: observed weather for days 1–16 after the origin (stands in for a weather forecast; forecast error ignored), then day-of-year climatology = mean of all dates before c within ± 7 calendar days (weather since 2015). Training rows keep observed weather |
+| Busy day | Entries above the station's 90th percentile of clean days of the same day group over the 365 days before the origin (before c with a lag). P(busy) from the conformal residual distribution (grid 5–95 %, linear CDF, tails clamped at 2.5 / 97.5 %). Scores: Brier, reliability bins |
 
 Known limits: profiles and validations are published months after the fact, so a real
-forecast made today has a longer effective horizon than the backtest; planned works and
-station closures are not in the features yet.
+forecast made today has a longer effective horizon than the main backtest (see the lag
+variants); planned works and station closures are not in the features yet.
+
+## Production forecast (`idf-forecast`, `make forecast-lgbm|forecast-export|forecast-combine` → `data/processed/forecast/CUTOFF/`)
+Decision record: `docs/adr/0002-production-forecast-per-release.md`.
+
+| Rule | Value |
+|---|---|
+| Cutoff | Day after the last date with published validations (`n_entries` not null) |
+| Issue date | First forecast date; default today. Refused if after cutoff + `days_max` − 1 |
+| Horizon | Forecast to cutoff + `days_max` − 1 (225 days: ~75 days of publication delay + ~90 to the next release + 60). Reported per row: `horizon` (days since the issue date) and `days_since_data` |
+| Stations | A clean day (target present, no quality flag) in the 28 days before the cutoff |
+| Future calendar | From the ingested public-holiday and school-holiday sources (`features/calendar.py`); null where a source does not cover the date |
+| Future weather | Observed where already downloaded, then day-of-year climatology (± 7 days, all observed years); `weather_source` per row |
+| Frozen at the cutoff | `short_pass_share` (last value), station type and morning share (profile periods ended before the cutoff) |
+| LightGBM | Same configuration as the backtest, fitted on all clean rows from `train_start` to the day before the cutoff |
+| TFT | `idf-deep export --production`: one origin = the cutoff, h = `days_max`; 3 seeds on a GPU; mean of the seeds' medians |
+| Point | mean(LightGBM, TFT seed mean); LightGBM alone for stations without TFT (fewer than 365 clean days) or without `--deep` (`model` column) |
+| 80 % band | Conformal: residual quantiles of the production-like backtest (variant `lag120_prod`: ensemble log for the ensemble, LightGBM log for LightGBM alone) dated in the 365 days before the cutoff, by day type × station type × horizon bucket (horizon = days since the issue date, buckets capped at 29–60) |
+| Not produced | P(busy day) (not calibrated well enough, see Backtest) |
+| Special days | Dec 24, Dec 25, Dec 31, Jan 1: LightGBM × a per-station factor (point and band), not the ensemble; columns `special_day`, `adjust` (1 on other dates); raw `lgbm` / `tft` kept. See "Special days" below |
+
+### Special days (`models/special_days.py`)
+**Finding.** In the production-like backtest (variant `lag120_prod`, forecasts 4–6 months ahead), both Christmas seasons were over-forecast at network level while a typical day is within ~±6 % (median absolute network error of the ensemble). Network error, forecast / actual − 1 (ensemble / LightGBM / TFT), mean of the origins covering the date:
+
+| date | 2024/25 | 2025/26 |
+|---|---|---|
+| Dec 24 | +36 % / +8 % / +65 % | +23 % / +11 % / +35 % |
+| Dec 25 | +44 % / +27 % / +62 % | +32 % / +28 % / +35 % |
+| Dec 31 | +67 % / +21 % / +113 % | +42 % / +14 % / +70 % |
+| Jan 1 | +49 % / +2 % / +96 % | +38 % / +7 % / +67 % |
+
+These 4 dates exceed |log ratio| 0.15 in both years; Dec 26 and Jan 2 do not (Dec 26 2025 and Jan 2 2026 are typed DIJFP by the calendar source). They are not excluded from training: the disruption rule only applies to JOHV/SAHV. Their day types (JOVS, DIJFP) group them with ordinary holiday days; TFT only has a smooth day of year, LightGBM few years. Other dates with large errors go the other way (under-forecast) and are only seen once (Jul 14, May 2025 bridge days, Whit Monday ≈ −20 %; summer 2024 = Olympics); many Sundays are under-forecast by 15–20 %. Not corrected.
+
+**Factor.** Per station × special day, from the LightGBM forecast log (warm-up + scored origins) with outcomes dated before the cutoff, clean rows only (`exclude` null):
+- r = log1p(y) − log1p(lgbm), averaged over the origins covering a date, then the median over years (seasons: Jan 1 belongs to the previous December).
+- A station-year counts only if the station had ≥ 730 days of data at that forecast's cutoff: young stations' errors shrink as their history grows (Orly, opened 2024-07: LightGBM Jan 1 forecasts 0.6–0.8 k in 2024/25 and 2.6–3.0 k in 2025/26 vs 10–12 k actual; an unfiltered factor would have been ×4.1).
+- Shrunk to the station-type target (median of the station-year ratios of that type; network median for untyped stations): log f = w · log f_station + (1 − w) · log f_type, w = n / (n + k), k = 2, n = years. Stations without own history get the type target.
+- Applied as point × f, lo × f, hi × f (the band is multiplicative in log space).
+
+**Validation (leave one year out).** Factors from Christmas 2024 (cutoff 2025-07-01), applied to the Christmas 2025 forecasts of the backtest (4 951 station-days, 4 dates):
+
+| variant | station WAPE | 80 % band coverage | network error Dec 24 / 25 / 31 / Jan 1 |
+|---|---|---|---|
+| ensemble (before) | 0.337 | 0.38 | +23 / +32 / +42 / +38 % |
+| ensemble × factor (k = 2) | 0.163 | 0.73 | −13 / −13 / −17 / −12 % |
+| LightGBM | 0.210 | 0.59 | +11 / +28 / +14 / +7 % |
+| **LightGBM × factor (k = 2)** | **0.130** | **0.79** | **+3 / −3 / −5 / +4 %** |
+
+k = 1 / 4 give 0.132 / 0.133. The ensemble factor overshoots because TFT's Christmas error roughly halved from 2024 to 2025 (not stable); LightGBM's was stable. Only one validation year: re-check after Christmas 2026.
+
+**First production run** (cutoff 2026-07-01): network totals Dec 24 / 25 / 31 / Jan 1 = 4.50 / 2.28 / 3.14 / 2.30 M (before: 5.89 / 3.48 / 5.21 / 3.27), i.e. −1 / −6 / −8 / +17 % vs the same date a year earlier (ordinary weekdays around them: +3 to +8 %). Median factor 0.78–0.90 by date, range 0.14–1.42. Other dates unchanged.
 
 ## Score (`idf-score build`, `make score` → `data/processed/typical_week.parquet`, `app/public/data/`)
 v0 **Typical week view**: one **Crowding score** per **Place** × **Day type** × hour. Settings in

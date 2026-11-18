@@ -3,7 +3,9 @@
     idf-backtest run                    all origins, then the report
     idf-backtest origin 2025-06-01 ...  only these origins (resumable, one folder each)
     idf-backtest report                 combine the per-origin results
+    idf-backtest summary                WAPE / coverage of every lag x weather variant run
     options: --origins N --objective tweedie|log1p --rounds N --no-weather-variant
+             --lag DAYS --weather observed|production --no-quantile-models
 
 Origins are the first day of each month; the last origin is the latest one whose full
 horizon (default 60 days) is inside the data, the previous ones go back one month each.
@@ -16,9 +18,16 @@ At each origin:
 `short_pass_share` and `station_type` are frozen at the origin (models/frozen.py).
 Weather is the observed weather (real use would only have forecasts, <= 16 days ahead).
 
-Writes data/processed/backtest/: origins/DATE/ (per origin), then predictions.parquet
-(one row per origin x station x date, all models), metrics.parquet, exclusions.parquet,
-importance.parquet and report.md.
+Production-like variants (step 4): `lag_days` > 0 sets a data cutoff c = origin - lag_days
+(IDFM publishes a quarter ~75 days after it ends): training, frozen features, baselines,
+busy thresholds and interval calibration only use data dated < c; the forecast still covers
+origin .. origin + horizon - 1 (`horizon` = days since the origin, `days_since_data` =
+lag + horizon). `weather_mode = "production"` replaces the weather after the first
+`forecast_days` days by climatology (models/weather.py).
+
+Writes data/processed/backtest/ (variants: backtest/variants/lagN_obs|prod/): origins/DATE/
+(per origin), then predictions.parquet (one row per origin x station x date, all models),
+metrics.parquet, exclusions.parquet, importance.parquet and report.md.
 """
 
 from __future__ import annotations
@@ -36,6 +45,7 @@ import polars as pl
 
 from idf_crowding.config import load_config
 from idf_crowding.models import baselines, gbm, intervals
+from idf_crowding.models import weather as wx
 from idf_crowding.models.closures import is_closure
 from idf_crowding.models.frozen import add_months, apply_frozen
 from idf_crowding.models.metrics import gains, horizon_bucket, network_level, summarize
@@ -57,7 +67,18 @@ class BacktestConfig:
     intervals: bool = True  # option B: quantile / conformal / CQR bands, P(busy day)
     warmup_origins: int = 12  # extra earlier origins: forecast log for calibration only
     quantile_rounds: int = 300
+    # step 4, production-like variants (defaults = the main backtest, unchanged)
+    lag_days: int = 0  # data cutoff = origin - lag_days (publication lag)
+    weather_mode: str = "observed"  # "observed" | "production" (climatology after forecast)
+    forecast_days: int = 16  # days covered by a weather forecast at issue time
+    quantile_models: bool = True  # LightGBM 10 % / 90 % fits (quantile and cqr bands)
     gbm: gbm.GBMConfig = field(default_factory=gbm.GBMConfig)
+
+    def __post_init__(self):
+        if self.weather_mode not in WEATHER_MODES:
+            raise ValueError(f"weather_mode must be one of {WEATHER_MODES}")
+        if self.lag_days < 0:
+            raise ValueError("lag_days must be >= 0")
 
     @classmethod
     def from_config(cls) -> BacktestConfig:
@@ -84,8 +105,34 @@ class BacktestConfig:
             intervals=c.get("intervals", cls.intervals),
             warmup_origins=c.get("warmup_origins", cls.warmup_origins),
             quantile_rounds=c.get("quantile_rounds", cls.quantile_rounds),
+            lag_days=c.get("lag_days", cls.lag_days),
+            weather_mode=c.get("weather_mode", cls.weather_mode),
+            forecast_days=c.get("forecast_days", cls.forecast_days),
+            quantile_models=c.get("quantile_models", cls.quantile_models),
             gbm=gcfg,
         )
+
+    def cutoff(self, origin: date) -> date:
+        """First day without data at issue date `origin`: data dated < cutoff is usable."""
+        return origin - timedelta(days=self.lag_days)
+
+    @property
+    def variant(self) -> str | None:
+        """Folder name of a production-like variant (None = the main backtest)."""
+        if self.lag_days == 0 and self.weather_mode == "observed":
+            return None
+        return f"lag{self.lag_days}_{'prod' if self.weather_mode == 'production' else 'obs'}"
+
+
+WEATHER_MODES = ("observed", "production")
+# step-4 fields left out of the fingerprint at their default value, so results run before
+# they existed stay valid
+_NEW_DEFAULTS = {
+    "lag_days": 0,
+    "weather_mode": "observed",
+    "forecast_days": 16,
+    "quantile_models": True,
+}
 
 
 def all_origins(last_date: date, cfg: BacktestConfig) -> tuple[list[date], list[date]]:
@@ -166,17 +213,28 @@ def with_horizon(df: pl.DataFrame, origin: date) -> pl.DataFrame:
 
 
 def run_origin(
-    data: pl.DataFrame, profiles: pl.DataFrame, origin: date, cfg: BacktestConfig
+    data: pl.DataFrame,
+    profiles: pl.DataFrame,
+    origin: date,
+    cfg: BacktestConfig,
+    weather: pl.DataFrame | None = None,
 ) -> OriginResult:
+    """Forecast origin .. origin + horizon - 1 from data dated < cfg.cutoff(origin).
+    `weather` = daily weather since the source starts (climatology in production mode;
+    defaults to the weather in `data`, i.e. since train_start)."""
+    c = cfg.cutoff(origin)
     end = origin + timedelta(days=cfg.horizon)
     window = data.filter(pl.col("date") < end)
-    window = apply_frozen(window, origin, profiles)
-    train = window.filter((pl.col("date") < origin) & pl.col("exclude").is_null())
+    window = apply_frozen(window, c, profiles)
+    train = window.filter((pl.col("date") < c) & pl.col("exclude").is_null())
     test = with_horizon(window.filter(pl.col("date") >= origin), origin)
+    if cfg.weather_mode == "production":
+        w = weather if weather is not None else wx.daily_weather(data)
+        test = wx.production_weather(test, w, origin, c, cfg.forecast_days)
 
     preds = {
-        "naive_4w": baselines.seasonal_naive(train, test, origin, cfg.naive_weeks),
-        "daytype_12m": baselines.day_type_mean(train, test, origin, cfg.daytype_days),
+        "naive_4w": baselines.seasonal_naive(train, test, c, cfg.naive_weeks),
+        "daytype_12m": baselines.day_type_mean(train, test, c, cfg.daytype_days),
     }
     model = gbm.fit(train, cfg.gbm)
     preds[MAIN] = pl.Series(gbm.predict(model, test, cfg.gbm))
@@ -186,19 +244,30 @@ def run_origin(
         preds["lgbm_noweather"] = pl.Series(gbm.predict(gbm.fit(train, nw), test, nw))
     extra: dict[str, pl.Series] = {}
     if cfg.intervals:
-        extra["busy_threshold"] = intervals.busy_threshold(train, test, origin)
+        extra["busy_threshold"] = intervals.busy_threshold(train, test, c)
+    if cfg.intervals and cfg.quantile_models:
         for a, name in [(intervals.LO, "lgbm_q10"), (intervals.HI, "lgbm_q90")]:
             qc = replace(
                 cfg.gbm, objective="quantile", alpha=a, num_boost_round=cfg.quantile_rounds
             )
             extra[name] = pl.Series(gbm.predict(gbm.fit(train, qc), test, qc))
 
+    variant_cols = []
+    if cfg.variant:
+        days_since = (pl.col("date") - pl.lit(c)).dt.total_days() + 1
+        variant_cols = [
+            pl.lit(c).alias("cutoff"),
+            days_since.cast(pl.Int32).alias("days_since_data"),
+        ]
+        if "weather_source" in test.columns:
+            variant_cols.append("weather_source")
     out = test.select(
         pl.lit(origin).alias("origin"),
         "station_id",
         "date",
         "horizon",
         "horizon_bucket",
+        *variant_cols,
         pl.col("station_type").fill_null("none"),
         "day_type",
         "exclude",
@@ -268,11 +337,27 @@ class Paths:
 
 
 def config_fingerprint(cfg: BacktestConfig) -> str:
-    return json.dumps(asdict(cfg), default=str, sort_keys=True)
+    d = asdict(cfg)
+    for k, v in _NEW_DEFAULTS.items():
+        if d[k] == v:
+            del d[k]
+    return json.dumps(d, default=str, sort_keys=True)
 
 
-def origin_dir(paths: Paths, origin: date) -> Path:
-    return paths.processed / "backtest" / "origins" / origin.isoformat()
+def backtest_dir(paths: Paths, cfg: BacktestConfig | None = None) -> Path:
+    """backtest/ for the main run, backtest/variants/NAME/ for a lag / weather variant."""
+    base = paths.processed / "backtest"
+    v = cfg.variant if cfg else None
+    return base / "variants" / v if v else base
+
+
+def origin_dir(paths: Paths, origin: date, cfg: BacktestConfig | None = None) -> Path:
+    return backtest_dir(paths, cfg) / "origins" / origin.isoformat()
+
+
+def load_weather(paths: Paths) -> pl.DataFrame:
+    """Daily weather since the source starts (climatology for production weather)."""
+    return wx.daily_weather(pl.scan_parquet(paths.processed / "features_daily.parquet"))
 
 
 def load_data(paths: Paths, cfg: BacktestConfig) -> tuple[pl.DataFrame, pl.DataFrame]:
@@ -290,13 +375,14 @@ def run_origins(
     """Backtest each origin; results go to backtest/origins/DATE/ (one folder per origin, so
     a long run can be split and resumed)."""
     data, profiles = load_data(paths, cfg)
+    weather = load_weather(paths) if cfg.weather_mode == "production" else None
     warm, scored = all_origins(data["date"].max(), cfg)
     origs = warm + scored
     todo = [o for o in origs if o in only] if only else origs
     for o in todo:
         t0 = time.time()
-        r = run_origin(data, profiles, o, cfg)
-        d = origin_dir(paths, o)
+        r = run_origin(data, profiles, o, cfg, weather)
+        d = origin_dir(paths, o, cfg)
         d.mkdir(parents=True, exist_ok=True)
         r.predictions.write_parquet(d / "predictions.parquet")
         r.exclusions.write_parquet(d / "exclusions.parquet")
@@ -318,7 +404,7 @@ def build_report(
     keys = ["predictions", "exclusions", "importance"]
     parts: dict[str, list[pl.DataFrame]] = {k: [] for k in keys}
     for o in warm + origs:
-        d = origin_dir(paths, o)
+        d = origin_dir(paths, o, cfg)
         if not (d / "config.json").exists():
             raise FileNotFoundError(f"origin {o} not run yet: idf-backtest origin {o}")
         if (d / "config.json").read_text(encoding="utf-8") != fp:
@@ -339,9 +425,12 @@ def build_report(
     out["metrics"] = metric_tables(long)
     if cfg.intervals:
         out["intervals"] = interval_metrics(out["predictions"].filter(pl.col("scored")))
-    target = paths.processed / "backtest"
+    target = backtest_dir(paths, cfg)
     for name, df in out.items():
         df.write_parquet(target / f"{name}.parquet")
+    (target / "variant.json").write_text(
+        json.dumps({"lag_days": cfg.lag_days, "weather_mode": cfg.weather_mode}), encoding="utf-8"
+    )
     (target / "report.md").write_text(report(out, long, cfg, origs), encoding="utf-8")
     log(f"backtest report: {len(origs)} origins (+{len(warm)} warm-up) -> {target / 'report.md'}")
     return out
@@ -434,16 +523,18 @@ def report(
         .sort("gain", descending=True)
         .select("feature", "gain_share")
     )
+    title = f"# Backtest report — variant {cfg.variant}" if cfg.variant else "# Backtest report"
     lines = [
-        "# Backtest report",
+        title,
         "",
+        *lag_lines(cfg),
         f"Origins: {len(origs)} monthly, {origs[0]} → {origs[-1]}; horizon 1–{cfg.horizon} "
         f"days; training from {cfg.train_start}. LightGBM objective `{cfg.gbm.objective}`, "
         f"{cfg.gbm.num_boost_round} rounds, trend feature {cfg.gbm.trend}, recency half-life "
         f"{cfg.gbm.half_life_days} days.",
         "Baselines: `naive_4w` = same weekday, mean of the last 4 weeks before the origin; "
         "`daytype_12m` = per-station mean by day type over the last 12 months.",
-        "Weather is the **observed** weather (real forecasts only reach ~16 days). "
+        weather_line(cfg),
         f"Closure rule: share of network < {cfg.closure_ratio} × trailing 365-day median "
         "(models/closures.py), left out of training and scoring.",
         "",
@@ -481,6 +572,28 @@ def report(
     return "\n".join(lines)
 
 
+def weather_line(cfg: BacktestConfig) -> str:
+    if cfg.weather_mode == "production":
+        return (
+            f"Weather: **production-like**: observed for days 1–{cfg.forecast_days} after the "
+            "origin (stands in for a weather forecast; forecast error ignored), day-of-year "
+            "climatology (± 7 days, years before the cutoff) after. "
+        )
+    return "Weather is the **observed** weather (real forecasts only reach ~16 days). "
+
+
+def lag_lines(cfg: BacktestConfig) -> list[str]:
+    if not cfg.lag_days:
+        return []
+    return [
+        f"**Publication lag {cfg.lag_days} days**: at origin o, only data dated before "
+        f"c = o − {cfg.lag_days} d is used (training, frozen features, baselines, busy "
+        "thresholds, interval calibration). Horizon = days since the origin; days since the "
+        f"last data = {cfg.lag_days} + horizon.",
+        "",
+    ]
+
+
 def interval_report(out: dict[str, pl.DataFrame]) -> list[str]:
     iv = out["intervals"]
     scored = out["predictions"].filter(pl.col("scored"))
@@ -501,7 +614,8 @@ def interval_report(out: dict[str, pl.DataFrame]) -> list[str]:
     return [
         "## Option B: 80 % intervals (target coverage 0.80)",
         "Calibration = forecast log: earlier origins' out-of-sample forecasts for clean days "
-        "of the 365 days before each origin (12 warm-up origins before the first scored one). "
+        "of the 365 days before each origin's data cutoff (the origin, or origin − lag; 12 "
+        "warm-up origins before the first scored one). "
         "`quantile` = LightGBM quantile 10 % / 90 % on log1p, raw; `conformal` = point "
         "forecast + residual quantiles by day type × station type × horizon bucket; `cqr` = "
         "conformalized quantile band. Interval score = Winkler score / Σy (lower is better).",
@@ -524,18 +638,103 @@ def interval_report(out: dict[str, pl.DataFrame]) -> list[str]:
     ]
 
 
+def variant_dirs(paths: Paths) -> list[Path]:
+    """Main backtest folder + every variant folder that has a report."""
+    base = paths.processed / "backtest"
+    dirs = [base] + sorted((base / "variants").glob("*/"))
+    return [d for d in dirs if (d / "metrics.parquet").exists()]
+
+
+def summary(paths: Paths, log: Callable[[str], None] = print) -> pl.DataFrame:
+    """One row per variant x model: WAPE overall / by horizon bucket, network WAPE, and the
+    conformal band (coverage, interval score) of lgbm. Writes backtest/variants/summary.md."""
+    rows = []
+    for d in variant_dirs(paths):
+        meta = (
+            json.loads((d / "variant.json").read_text(encoding="utf-8"))
+            if (d / "variant.json").exists()
+            else {"lag_days": 0, "weather_mode": "observed"}
+        )
+        m = pl.read_parquet(d / "metrics.parquet")
+        st = m.filter(pl.col("level") == "station")
+        wide = (
+            st.filter(pl.col("dimension").is_in(["overall", "horizon_bucket"]))
+            .with_columns(
+                pl.when(pl.col("dimension") == "overall")
+                .then(pl.lit("wape"))
+                .otherwise(pl.lit("wape_") + pl.col("group"))
+                .alias("k")
+            )
+            .pivot(on="k", index="model", values="wape")
+        )
+        n = st.filter(pl.col("dimension") == "overall").select("model", "n")
+        net = m.filter((pl.col("level") == "network") & (pl.col("dimension") == "overall"))
+        t = n.join(wide, on="model").join(
+            net.select("model", pl.col("wape").alias("network_wape")), on="model", how="left"
+        )
+        if (d / "intervals.parquet").exists():
+            iv = pl.read_parquet(d / "intervals.parquet").filter(
+                (pl.col("dimension") == "overall") & (pl.col("method") == "conformal")
+            )
+            t = t.with_columns(
+                pl.when(pl.col("model") == MAIN).then(iv["coverage"][0]).alias("coverage"),
+                pl.when(pl.col("model") == MAIN).then(iv["interval_score"][0]).alias("int_score"),
+            )
+        rows.append(
+            t.with_columns(
+                pl.lit(meta["lag_days"]).alias("lag"), pl.lit(meta["weather_mode"]).alias("weather")
+            )
+        )
+    if not rows:
+        raise FileNotFoundError("no backtest report yet")
+    order = {m: i for i, m in enumerate([MAIN, *BASELINES])}
+    out = (
+        pl.concat(rows, how="diagonal")
+        .with_columns(pl.col("model").replace_strict(order, default=99).alias("_o"))
+        .sort("lag", "weather", "_o")
+        .drop("_o")
+    )
+    cols = ["lag", "weather", "model", "n", "wape"]
+    cols += [c for c in ["wape_1-7", "wape_8-28", "wape_29-60"] if c in out.columns]
+    cols += [c for c in ["network_wape", "coverage", "int_score"] if c in out.columns]
+    out = out.select(cols)
+    target = paths.processed / "backtest" / "variants"
+    target.mkdir(parents=True, exist_ok=True)
+    text = [
+        "# Backtest variants: publication lag x weather",
+        "",
+        "Each row = one `idf-backtest` run (24 origins incl. 12 warm-up; scored rows of the 12 "
+        "scored origins). lag = days between the data cutoff and the origin; horizon buckets "
+        "count days since the origin. coverage / int_score = lgbm conformal 80 % band.",
+        "Scored rows differ slightly between lags (stations without data before the cutoff).",
+        "",
+        _md(out),
+        "",
+    ]
+    (target / "summary.md").write_text("\n".join(text), encoding="utf-8")
+    out.write_parquet(target / "summary.parquet")
+    log(f"summary of {len(rows)} runs -> {target / 'summary.md'}")
+    return out
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="idf-backtest", description=__doc__.splitlines()[0])
     parser.add_argument(
         "command",
-        choices=["run", "origin", "report"],
-        help="run = all origins + report; origin = only the given origins; report = combine",
+        choices=["run", "origin", "report", "summary"],
+        help="run = all origins + report; origin = only the given origins; report = combine; "
+        "summary = table of all lag / weather variants",
     )
     parser.add_argument("dates", nargs="*", help="origins for `origin` (YYYY-MM-DD)")
     parser.add_argument("--origins", type=int, help="number of monthly origins")
     parser.add_argument("--objective", choices=["tweedie", "log1p"])
     parser.add_argument("--rounds", type=int, help="LightGBM boosting rounds")
     parser.add_argument("--no-weather-variant", action="store_true")
+    parser.add_argument("--lag", type=int, help="publication lag in days (data cutoff)")
+    parser.add_argument("--weather", choices=list(WEATHER_MODES))
+    parser.add_argument(
+        "--no-quantile-models", action="store_true", help="skip the quantile / cqr bands"
+    )
     a = parser.parse_args(argv)
     cfg = BacktestConfig.from_config()
     if a.origins:
@@ -546,7 +745,16 @@ def main(argv: list[str] | None = None) -> int:
         cfg = replace(cfg, gbm=replace(cfg.gbm, num_boost_round=a.rounds))
     if a.no_weather_variant:
         cfg = replace(cfg, weather_variant=False)
+    if a.lag is not None:
+        cfg = replace(cfg, lag_days=a.lag)
+    if a.weather:
+        cfg = replace(cfg, weather_mode=a.weather)
+    if a.no_quantile_models:
+        cfg = replace(cfg, quantile_models=False)
     paths = Paths.from_config()
+    if a.command == "summary":
+        summary(paths)
+        return 0
     if a.command == "run":
         run(paths, cfg)
     elif a.command == "origin":

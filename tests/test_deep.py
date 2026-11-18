@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 import numpy as np
 import polars as pl
-from test_models import features, profiles, small_cfg
+from test_models import features, profiles, small_cfg, with_random_weather
 
 from idf_crowding.models import backtest as bt
 from idf_crowding.models import deep
@@ -158,3 +158,110 @@ def test_recalibrate_busy_uses_only_earlier_outcomes(monkeypatch):
     # but earlier outcomes do matter
     c = intervals.recalibrate_busy(log.with_columns(pl.lit(150.0).alias("y")), [o])
     assert not a.equals(c)
+
+
+# --- step 4: publication lag and production weather ---------------------------------
+
+
+def test_inputs_with_lag_end_history_at_the_cutoff():
+    o = date(2025, 7, 1)
+    cfg = small_cfg(lag_days=40, weather_mode="production")
+    c = cfg.cutoff(o)
+    df = with_random_weather(features())
+
+    def run(d):
+        data = bt.prepare(d, cfg)
+        return deep.origin_inputs(data, profiles(), o, cfg, deep.DeepConfig(min_history=100))
+
+    t, s, info = run(df)
+    assert info["cutoff"] == c.isoformat()
+    fut = t.filter(pl.col("is_future"))
+    assert fut["ds"].min() == c and fut["ds"].max() == o + timedelta(days=cfg.horizon - 1)
+    # model h = lag + horizon rows per station
+    assert fut.group_by("unique_id").len()["len"].unique().to_list() == [40 + cfg.horizon]
+    assert t.filter(~pl.col("is_future"))["ds"].max() == c - timedelta(days=1)
+    # targets and short_pass_share from the cutoff on, weather after the forecast range:
+    # unknown at issue time, inputs must not change
+    later = df.with_columns(
+        pl.when(pl.col("date") >= c).then(pl.col("n_entries") * 10).otherwise(pl.col("n_entries")),
+        pl.when(pl.col("date") >= c)
+        .then(pl.lit(0.5))
+        .otherwise(pl.col("short_pass_share"))
+        .alias("short_pass_share"),
+        pl.when(pl.col("date") >= o + timedelta(days=16))
+        .then(pl.lit(-40.0))
+        .otherwise(pl.col("tmax_c"))
+        .alias("tmax_c"),
+    )
+    t2, s2, _ = run(later)
+    assert t.equals(t2) and s.equals(s2)
+    # observed weather on the gap and the first 16 days is used (known at issue time)
+    gap = df.with_columns(
+        pl.when(pl.col("date") == c + timedelta(days=3))
+        .then(pl.lit(-40.0))
+        .otherwise(pl.col("tmax_c"))
+        .alias("tmax_c")
+    )
+    assert not run(gap)[0].equals(t)
+
+
+def test_score_variant_ignores_gap_rows(tmp_path):
+    o = date(2025, 7, 1)
+    cfg = small_cfg(lag_days=10, weather_mode="production")
+    pred = pl.DataFrame(
+        {
+            "origin": [o] * 2,
+            "station_id": [1, 2],
+            "date": [o, o],
+            "horizon": [1, 1],
+            "horizon_bucket": ["1-7"] * 2,
+            "station_type": ["mixed"] * 2,
+            "day_type": ["JOHV"] * 2,
+            "y": [100.0, 200.0],
+            "naive_4w": [90.0] * 2,
+            "daytype_12m": [90.0] * 2,
+            "lgbm": [110.0, 180.0],
+            "scored": [True, True],
+        }
+    )
+    vdir = tmp_path / "backtest/variants/lag10_prod"
+    vdir.mkdir(parents=True)
+    pred.write_parquet(vdir / "predictions.parquet")
+    fc_dir = tmp_path / "fc"
+    fc_dir.mkdir()
+    gap_day = o - timedelta(days=3)
+    pl.DataFrame(
+        {
+            "station_id": [1, 2, 1, 2],
+            "date": [o, o, gap_day, gap_day],
+            "origin": [o] * 4,
+            "model": ["tft"] * 4,
+            "q10": [80.0] * 4,
+            "q50": [100.0, 200.0, 999.0, 999.0],
+            "q90": [120.0] * 4,
+        }
+    ).write_parquet(fc_dir / "tft_2025-07-01.parquet")
+    t = deep.score(bt.Paths(tmp_path), fc_dir, cfg, log=lambda _: None)
+    w = dict(t["overall"].select("model", "wape").iter_rows())
+    assert w["tft"] == 0.0 and t["overall"]["n"][0] == 2
+    report = (vdir / "deep/report.md").read_text(encoding="utf-8")
+    assert "Variant lag10_prod" in report
+
+
+def test_seed_average_needs_every_seed():
+    o = date(2025, 7, 1)
+    fc = pl.DataFrame(
+        {
+            "origin": [o] * 5,
+            "station_id": [1, 1, 1, 2, 2],
+            "date": [o] * 5,
+            "model": ["tft", "tft_s2", "tft_s3", "tft", "tft_s2"],
+            "q10": [1.0, 2.0, 3.0, 1.0, 1.0],
+            "q50": [10.0, 20.0, 30.0, 1.0, 1.0],
+            "q90": [100.0, 200.0, 300.0, 1.0, 1.0],
+        }
+    )
+    a = deep.seed_average(fc, ["tft", "tft_s2", "tft_s3"])
+    assert a.height == 1 and a["station_id"][0] == 1  # station 2 lacks seed 3
+    assert a.select("q10", "q50", "q90").row(0) == (2.0, 20.0, 200.0)
+    assert a["model"][0] == "tft_seedavg"

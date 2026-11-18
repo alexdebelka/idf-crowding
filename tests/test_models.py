@@ -9,6 +9,7 @@ import pytest
 
 from idf_crowding.models import backtest as bt
 from idf_crowding.models import baselines, gbm, intervals
+from idf_crowding.models import weather as wx
 from idf_crowding.models.closures import is_closure
 from idf_crowding.models.frozen import (
     apply_frozen,
@@ -440,3 +441,156 @@ def test_busy_threshold_same_day_group_last_year():
     t = pl.DataFrame({"station_id": [1, 1], "day_type": ["JOVS", "DIJFP"]})
     got = intervals.busy_threshold(hist(rows), t, o).to_list()
     assert got[0] == pytest.approx(110.0, abs=1) and got[1] is None
+
+
+# --- step 4: publication lag and production weather ---------------------------------
+
+
+def with_random_weather(df, seed=1):
+    """Weather that varies by date (one regional series, same for every station)."""
+    dates = df.select("date").unique().sort("date")
+    rng = np.random.default_rng(seed)
+    w = dates.with_columns(
+        pl.Series("tmax_c", rng.uniform(0, 30, dates.height)),
+        pl.Series("precip_mm", rng.exponential(2, dates.height)),
+    )
+    return df.drop("tmax_c", "precip_mm").join(w, on="date", how="left")
+
+
+def test_default_config_keeps_the_main_fingerprint_and_folder(tmp_path):
+    cfg = bt.BacktestConfig()
+    fp = bt.config_fingerprint(cfg)
+    for k in ["lag_days", "weather_mode", "forecast_days", "quantile_models"]:
+        assert k not in fp  # results run before step 4 stay valid
+    assert cfg.variant is None and cfg.cutoff(date(2025, 6, 1)) == date(2025, 6, 1)
+    lag = replace(cfg, lag_days=120, weather_mode="production")
+    assert "lag_days" in bt.config_fingerprint(lag)
+    assert lag.variant == "lag120_prod" and replace(cfg, lag_days=75).variant == "lag75_obs"
+    assert replace(cfg, weather_mode="production").variant == "lag0_prod"
+    assert lag.cutoff(date(2025, 6, 1)) == date(2025, 2, 1)
+    paths = bt.Paths(tmp_path)
+    assert bt.origin_dir(paths, date(2025, 6, 1)) == tmp_path / "backtest/origins/2025-06-01"
+    assert bt.origin_dir(paths, date(2025, 6, 1), lag) == (
+        tmp_path / "backtest/variants/lag120_prod/origins/2025-06-01"
+    )
+    with pytest.raises(ValueError):
+        replace(cfg, weather_mode="forecast")
+
+
+def test_climatology_same_calendar_days_before_cutoff_only():
+    days = [date(2023, 1, 1) + timedelta(days=i) for i in range(3 * 365)]
+    w = pl.DataFrame({"date": days}).with_columns(
+        pl.col("date").dt.year().cast(pl.Float64).alias("tmax_c"),
+        *[pl.lit(0.0).alias(c) for c in gbm.WEATHER if c != "tmax_c"],
+    )
+    clim = wx.climatology(w, date(2025, 1, 1), window=7)
+    by = dict(clim.select("doy", "tmax_c").iter_rows())
+    assert by[180] == pytest.approx(2023.5)  # mean of 2023 and 2024 only
+    # Jan 3 +- 7 days wraps to late December of the previous year
+    near_new_year = w.filter(
+        (pl.col("date") < date(2025, 1, 1))
+        & (
+            (pl.col("date").dt.ordinal_day() <= 10)
+            | (pl.col("date").dt.ordinal_day() >= 362)  # doy 366 wraps to 3 - 7 = -4 -> 362
+        )
+    )
+    assert by[3] == pytest.approx(near_new_year["tmax_c"].mean())
+
+
+def test_production_weather_observed_then_climatology():
+    o, c = date(2025, 7, 1), date(2025, 3, 1)
+    w = pl.DataFrame(
+        {"date": [date(2024, 1, 1) + timedelta(days=i) for i in range(700)]}
+    ).with_columns(
+        pl.col("date").dt.ordinal_day().cast(pl.Float64).alias("tmax_c"),
+        *[pl.lit(1.0).alias(c) for c in gbm.WEATHER if c != "tmax_c"],
+    )
+    test = pl.DataFrame({"date": [o + timedelta(days=i) for i in range(30)]}).with_columns(
+        *[pl.lit(-99.0).alias(c) for c in gbm.WEATHER]
+    )
+    out = wx.production_weather(test, w, o, c, forecast_days=16)
+    assert out["weather_source"].to_list() == ["observed"] * 16 + ["climatology"] * 14
+    assert (out["tmax_c"][:16] == -99.0).all()  # observed kept for the forecast range
+    assert out["tmax_c"][16] == pytest.approx((o + timedelta(days=16)).timetuple().tm_yday)
+    assert out.height == test.height and out["date"].to_list() == test["date"].to_list()
+
+
+def test_run_origin_with_lag_uses_only_data_before_the_cutoff():
+    cfg = small_cfg(lag_days=40, weather_mode="production")
+    data = bt.prepare(with_random_weather(features()), cfg)
+    o = date(2025, 7, 1)
+    c = cfg.cutoff(o)
+    a = bt.run_origin(data, profiles(), o, cfg).predictions
+    # targets, short_pass_share from the cutoff on and weather after the forecast range
+    # are unknown at issue time: predictions must not move
+    later = data.with_columns(
+        pl.when(pl.col("date") >= c).then(pl.col("n_entries") * 10).otherwise(pl.col("n_entries")),
+        pl.when(pl.col("date") >= c)
+        .then(pl.lit(0.5))
+        .otherwise(pl.col("short_pass_share"))
+        .alias("short_pass_share"),
+        pl.when(pl.col("date") >= o + timedelta(days=16))
+        .then(pl.lit(-40.0))
+        .otherwise(pl.col("tmax_c"))
+        .alias("tmax_c"),
+    )
+    b = bt.run_origin(later, profiles(), o, cfg).predictions
+    for m in ["naive_4w", "daytype_12m", "lgbm", "lgbm_q10", "lgbm_q90", "busy_threshold"]:
+        np.testing.assert_allclose(a[m].to_numpy(), b[m].to_numpy())
+    assert a["date"].min() == o and a["horizon"].min() == 1  # the gap is not forecast
+    assert a["cutoff"].unique().to_list() == [c]
+    assert a["days_since_data"].min() == 41 and a["days_since_data"].max() == 40 + cfg.horizon
+    assert a.filter(pl.col("horizon") <= 16)["weather_source"].unique().to_list() == ["observed"]
+    # baselines read the 4 weeks / 12 months before the cutoff, not before the origin
+    late = data.with_columns(
+        pl.when(pl.col("date").is_between(c, o, closed="left"))
+        .then(pl.col("n_entries") * 10)
+        .otherwise(pl.col("n_entries"))
+    )
+    lag0 = bt.run_origin(late, profiles(), o, replace(cfg, lag_days=0)).predictions
+    assert lag0["naive_4w"].mean() > 5 * a["naive_4w"].mean()
+
+
+def test_calibration_rows_end_at_the_cutoff(monkeypatch):
+    monkeypatch.setattr(intervals, "MIN_CAL", 5)
+    past = log_rows(date(2025, 1, 1), 100, 0.1)  # dated 2025-01-01 .. 01-20
+    rows = intervals.calibration_rows(past, date(2025, 3, 1), date(2025, 1, 11))
+    assert rows["date"].max() == date(2025, 1, 10)
+    assert intervals.calibration_rows(past, date(2025, 3, 1)).height == 100
+    target = log_rows(date(2025, 3, 1), 10, 0.1)
+    log = pl.concat([past, target]).with_columns(
+        pl.when(pl.col("origin") == date(2025, 3, 1))
+        .then(pl.lit(date(2025, 1, 11)))
+        .otherwise(pl.lit(date(2024, 11, 22)))
+        .alias("cutoff")
+    )
+    b = intervals.conformalize(log.drop("lgbm_q10", "lgbm_q90"), [date(2025, 3, 1)])
+    assert b["n_cal"][0] == rows.height
+    assert b["cqr_lo"].is_nan().all() and b["conf_hi"].is_not_nan().all()
+
+
+def test_variant_run_report_and_summary(tmp_path, monkeypatch):
+    monkeypatch.setattr(intervals, "MIN_CAL", 20)
+    proc = tmp_path / "processed"
+    proc.mkdir()
+    with_random_weather(features()).write_parquet(proc / "features_daily.parquet")
+    profiles().write_parquet(proc / "station_profiles.parquet")
+    paths = bt.Paths(proc)
+    main_cfg = small_cfg(quantile_models=False)
+    bt.run_origins(paths, main_cfg, log=lambda _: None)
+    bt.build_report(paths, main_cfg, log=lambda _: None)
+    cfg = small_cfg(lag_days=20, weather_mode="production", quantile_models=False)
+    bt.run_origins(paths, cfg, log=lambda _: None)
+    out = bt.build_report(paths, cfg, log=lambda _: None)
+    vdir = proc / "backtest/variants/lag20_prod"
+    report = (vdir / "report.md").read_text(encoding="utf-8")
+    assert "Publication lag 20 days" in report and "production-like" in report
+    assert set(out["intervals"]["method"]) == {"conformal"}
+    s = bt.summary(paths, log=lambda _: None)
+    assert s.select("lag", "weather").unique().sort("lag").rows() == [
+        (0, "observed"),
+        (20, "production"),
+    ]
+    lg = s.filter(pl.col("model") == "lgbm")
+    assert lg["coverage"].is_not_null().all()
+    assert (proc / "backtest/variants/summary.md").exists()

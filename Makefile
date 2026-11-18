@@ -1,4 +1,4 @@
-.PHONY: setup test lint format check poll status compact backup ingest ingest-plan clean features backtest deep-export deep-export-warmup deep-score score
+.PHONY: setup test lint format check poll status compact backup ingest ingest-plan clean features backtest deep-export deep-export-warmup deep-score score forecast-lgbm forecast-export forecast-combine
 
 setup:
 	uv sync
@@ -63,3 +63,14 @@ deep-export-warmup:
 
 deep-score:
 	uv run idf-deep score
+
+# Step 4c: production forecast, once per IDFM release (docs/adr/0002). After `make ingest clean features`:
+forecast-lgbm:
+	uv run idf-forecast lgbm
+
+# TFT inputs for the GPU notebook (3 seeds), then: make forecast-combine DEEP=<outputs folder>
+forecast-export:
+	uv run idf-deep export --production
+
+forecast-combine:
+	uv run idf-forecast combine $(if $(DEEP),--deep $(DEEP),)

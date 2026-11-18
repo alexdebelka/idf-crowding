@@ -21,6 +21,7 @@ idf-features = "idf_crowding.features.build:main"
 idf-clean = "idf_crowding.clean.build:main"
 idf-backtest = "idf_crowding.models.backtest:main"
 idf-deep = "idf_crowding.models.deep:main"
+idf-forecast = "idf_crowding.models.forecast:main"
 idf-score = "idf_crowding.score.build:main"
 
 [dependency-groups]

@@ -1,14 +1,19 @@
 """Option C: inputs for deep global models trained elsewhere (e.g. a Colab GPU), and the
 scoring of their forecasts on the backtest harness.
 
-    idf-deep export [--out DIR] [--warmup]
+    idf-deep export [--out DIR] [--warmup] [--lag N --weather production]
                                     one input file per scored origin (+ static, meta.json);
                                     --warmup also exports the warm-up origins (forecast log
-                                    for calibrated intervals of the ensemble)
-    idf-deep score  [--dir DIR]     score deep forecasts against lgbm on the same rows;
-                                    seed average when several TFT seeds exist; calibrated
-                                    80 % band and P(busy) for mean(lgbm, tft) when TFT has
-                                    the warm-up origins
+                                    for calibrated intervals of the ensemble); --lag /
+                                    --weather: production-like variant (step 4)
+    idf-deep export --production    TFT inputs for the production forecast (models/forecast.py):
+                                    one origin = the data cutoff, h = forecast days_max
+    idf-deep score  [--dir DIR] [--lag N --weather production]
+                                    score deep forecasts against lgbm on the same rows (the
+                                    lgbm backtest of the same variant); seed average when
+                                    several TFT seeds exist; calibrated 80 % band and P(busy)
+                                    for mean(lgbm, tft) when TFT has the warm-up origins
+                                    (seed average when every seed has them)
 
 The leakage rules live here, not in the notebook that trains the models:
 - per origin, history = station-days from `train_start` to the day before the origin on a
@@ -21,6 +26,11 @@ The leakage rules live here, not in the notebook that trains the models:
   computed from data before the origin (models/frozen.py);
 - weather is the observed weather (same caveat as LightGBM), standardised with
   statistics from before the origin;
+- with a publication lag (step 4, `BacktestConfig.lag_days`), "the origin" above reads
+  "the data cutoff c = origin - lag": history ends at c, future rows are c .. origin +
+  horizon - 1 (model h = lag + horizon; the gap rows are forecast but never scored), with
+  observed calendar / weather on the gap (known at issue time) and, in production weather
+  mode, climatology after origin + forecast_days (models/weather.py);
 - stations with fewer than `min_history` days of clean history before the origin are
   left out (cold start: scored with LightGBM only, counted in the report).
 Target y = log1p(entries); forecasts are returned as entries (expm1 of the quantiles).
@@ -32,7 +42,7 @@ import argparse
 import json
 import re
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -41,6 +51,7 @@ import polars as pl
 
 from idf_crowding.models import backtest as bt
 from idf_crowding.models import intervals
+from idf_crowding.models import weather as wx
 from idf_crowding.models.frozen import apply_frozen
 from idf_crowding.models.gbm import DAY_TYPES, STATION_TYPES, WEATHER
 from idf_crowding.models.metrics import summarize
@@ -91,18 +102,21 @@ def origin_inputs(
     origin: date,
     cfg: bt.BacktestConfig,
     dcfg: DeepConfig | None = None,
+    weather: pl.DataFrame | None = None,
 ) -> tuple[pl.DataFrame, pl.DataFrame, dict]:
-    """(temporal frame, static frame, info) for one origin. `data` = bt.prepare output."""
+    """(temporal frame, static frame, info) for one origin. `data` = bt.prepare output;
+    `weather` = daily weather since the source starts (production weather climatology)."""
     dcfg = dcfg or DeepConfig()
+    c = cfg.cutoff(origin)
     end = origin + timedelta(days=cfg.horizon)
-    w = apply_frozen(data.filter(pl.col("date") < end), origin, profiles)
-    past = w.filter(pl.col("date") < origin)
+    w = apply_frozen(data.filter(pl.col("date") < end), c, profiles)
+    past = w.filter(pl.col("date") < c)
     clean = past.filter(pl.col("exclude").is_null())
 
-    # stations: enough clean history and active just before the origin
+    # stations: enough clean history and active just before the cutoff
     hist_n = clean.group_by("station_id").agg(
         pl.len().alias("n_clean"),
-        (pl.col("date") >= origin - timedelta(days=dcfg.active_days)).any().alias("active"),
+        (pl.col("date") >= c - timedelta(days=dcfg.active_days)).any().alias("active"),
         pl.col("date").min().alias("first"),
     )
     keep = hist_n.filter((pl.col("n_clean") >= dcfg.min_history) & pl.col("active"))
@@ -130,6 +144,9 @@ def origin_inputs(
             *WEATHER,
         ]
     )
+    if cfg.weather_mode == "production":
+        wd = weather if weather is not None else wx.daily_weather(data)
+        cal = wx.production_weather(cal, wd, origin, c, cfg.forecast_days).drop("weather_source")
     rows = w.filter(pl.col("station_id").is_in(ids.implode())).select(
         "station_id", "date", "n_entries", "exclude"
     )
@@ -138,7 +155,7 @@ def origin_inputs(
         .join(cal, on="date", how="left")
         .sort("station_id", "date")
     )
-    is_future = pl.col("date") >= origin
+    is_future = pl.col("date") >= c
     ok = (~is_future) & pl.col("exclude").is_null() & pl.col("n_entries").is_not_null()
     wstats = past.group_by("date").agg(pl.col(c).first() for c in WEATHER)
     mu = {c: wstats[c].mean() for c in WEATHER}
@@ -166,7 +183,7 @@ def origin_inputs(
     )
 
     size = (
-        clean.filter(pl.col("date") >= origin - timedelta(days=365))
+        clean.filter(pl.col("date") >= c - timedelta(days=365))
         .group_by("station_id")
         .agg(pl.col("n_entries").mean().log1p().alias("log_size"))
     )
@@ -189,6 +206,7 @@ def origin_inputs(
     left_out = past["station_id"].n_unique() - len(ids)
     info = {
         "origin": origin.isoformat(),
+        "cutoff": c.isoformat(),
         "n_series": len(ids),
         "n_left_out": int(left_out),
         "n_rows": temporal.height,
@@ -207,17 +225,22 @@ def export(
     paths: bt.Paths, cfg: bt.BacktestConfig, out: Path, warmup: bool = False, log=print
 ) -> list[dict]:
     data, profiles = bt.load_data(paths, cfg)
+    weather = bt.load_weather(paths) if cfg.weather_mode == "production" else None
     (out / "inputs").mkdir(parents=True, exist_ok=True)
     infos = []
     for o, role in export_plan(data["date"].max(), cfg, warmup):
-        temporal, static, info = origin_inputs(data, profiles, o, cfg)
+        temporal, static, info = origin_inputs(data, profiles, o, cfg, weather=weather)
         info["role"] = role
         temporal.write_parquet(out / "inputs" / f"{o}.parquet", compression="zstd")
         static.write_parquet(out / "inputs" / f"{o}_static.parquet")
         infos.append(info)
         log(f"export {o} ({role}): {info['n_series']} series, {info['n_rows']:,} rows")
     meta = {
-        "horizon": cfg.horizon,
+        # model h: future rows run from the cutoff (origin - lag) to origin + horizon - 1
+        "horizon": cfg.horizon + cfg.lag_days,
+        "score_horizon": cfg.horizon,
+        "lag_days": cfg.lag_days,
+        "weather_mode": cfg.weather_mode,
         "freq": "D",
         "target": "log1p(entries)",
         "futr_exog": FUTR,
@@ -227,6 +250,39 @@ def export(
     }
     (out / "inputs" / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
     return infos
+
+
+def export_production(cfg: bt.BacktestConfig, out: Path, fcfg=None, fpaths=None, log=print) -> dict:
+    """One input file for the production forecast: history to the data cutoff c, future
+    rows c .. c + days_max - 1 with the calendar / weather of models/forecast.py."""
+    from idf_crowding.models import forecast as fx
+
+    fcfg = fcfg or fx.ForecastConfig.from_config()
+    fpaths = fpaths or fx.Paths.from_config()
+    ext, c, _ = fx.extended(fpaths, fcfg)
+    cfg0 = replace(cfg, lag_days=0, weather_mode="observed", horizon=fcfg.days_max)
+    data = bt.prepare(ext, cfg0)
+    profiles = pl.read_parquet(fpaths.processed / "station_profiles.parquet")
+    temporal, static, info = origin_inputs(data, profiles, c, cfg0)
+    info["role"] = "production"
+    (out / "inputs").mkdir(parents=True, exist_ok=True)
+    temporal.write_parquet(out / "inputs" / f"{c}.parquet", compression="zstd")
+    static.write_parquet(out / "inputs" / f"{c}_static.parquet")
+    meta = {
+        "horizon": fcfg.days_max,
+        "production": True,
+        "cutoff": c.isoformat(),
+        "data_end": (c - timedelta(days=1)).isoformat(),
+        "freq": "D",
+        "target": "log1p(entries)",
+        "futr_exog": FUTR,
+        "stat_exog": STATIC,
+        "quantiles": [0.1, 0.5, 0.9],
+        "origins": [info],
+    }
+    (out / "inputs" / "meta.json").write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    log(f"export production {c}: {info['n_series']} series, h = {fcfg.days_max} -> {out}")
+    return meta
 
 
 # --- scoring ---------------------------------------------------------------------------
@@ -251,12 +307,17 @@ def seed_models(models: list[str], base: str = "tft") -> list[str]:
 
 
 def ensemble_log(
-    paths: bt.Paths, fc: pl.DataFrame, origins: list[date], deep: str = "tft"
+    paths: bt.Paths,
+    fc: pl.DataFrame,
+    origins: list[date],
+    deep: str = "tft",
+    cfg: bt.BacktestConfig | None = None,
 ) -> pl.DataFrame:
     """Forecast log for the ensemble: LightGBM backtest rows of `origins` (warm-up and
-    scored) that also have a `deep` forecast; ens = mean(lgbm, deep)."""
+    scored, from the backtest of the same variant as `cfg`) that also have a `deep`
+    forecast; ens = mean(lgbm, deep)."""
     lg = pl.concat(
-        [pl.read_parquet(bt.origin_dir(paths, o) / "predictions.parquet") for o in origins],
+        [pl.read_parquet(bt.origin_dir(paths, o, cfg) / "predictions.parquet") for o in origins],
         how="diagonal",
     )
     d = fc.filter(pl.col("model") == deep).select(
@@ -337,11 +398,30 @@ def calibrate(
     return out, tables
 
 
+def seed_average(fc: pl.DataFrame, seeds: list[str], name: str = "tft_seedavg") -> pl.DataFrame:
+    """Rows of `name` = mean of the seeds' q10 / q50 / q90, where every seed has a forecast."""
+    return (
+        fc.filter(pl.col("model").is_in(seeds))
+        .group_by("origin", "station_id", "date")
+        .agg(pl.len().alias("_n"), *[pl.col(q).mean() for q in ["q10", "q50", "q90"]])
+        .filter(pl.col("_n") == len(seeds))
+        .drop("_n")
+        .with_columns(pl.lit(name).alias("model"))
+    )
+
+
 def score(
     paths: bt.Paths, folder: Path, cfg: bt.BacktestConfig | None = None, log=print
 ) -> dict[str, pl.DataFrame]:
+    cfg = cfg or bt.BacktestConfig.from_config()
     fc = load_forecasts(folder)
-    pred = pl.read_parquet(paths.processed / "backtest" / "predictions.parquet").filter(
+    # lag variants: the model also forecasts the gap (cutoff .. origin - 1); score from the
+    # origin on only, like LightGBM
+    fc = fc.filter(
+        (pl.col("date") >= pl.col("origin"))
+        & (pl.col("date") < pl.col("origin") + pl.duration(days=cfg.horizon))
+    )
+    pred = pl.read_parquet(bt.backtest_dir(paths, cfg) / "predictions.parquet").filter(
         pl.col("scored") & pl.col("origin").is_in(fc["origin"].unique().implode())
     )
     deep_models = sorted(fc["model"].unique())
@@ -382,20 +462,27 @@ def score(
     tables["bands"] = cov
     if len(seeds) > 1:
         tables["seeds"] = seed_spread(tables, seeds)
-    target = paths.processed / "backtest" / "deep"
+    target = bt.backtest_dir(paths, cfg) / "deep"
     target.mkdir(parents=True, exist_ok=True)
     common.write_parquet(target / "predictions.parquet")
     calib = None
     feats = paths.processed / "features_daily.parquet"
     warm, scored = [], []
     if feats.exists():
-        cfg = cfg or bt.BacktestConfig.from_config()
         last = pl.scan_parquet(feats).select(pl.col("date").max()).collect().item()
         warm, scored = bt.all_origins(last, cfg)
-    have = set(fc.filter(pl.col("model") == "tft")["origin"].unique().to_list())
-    if warm and set(warm + scored) <= have:
-        elog = ensemble_log(paths, fc, warm + scored)
-        bands_out, calib = calibrate(elog, warm, scored)
+
+    def covers(f: pl.DataFrame) -> bool:
+        return bool(warm) and set(warm + scored) <= set(f["origin"].unique().to_list())
+
+    # calibrate the ensemble on the seed average when every seed has the warm-up origins
+    calib_model = "tft"
+    if len(seeds) > 1 and all(covers(fc.filter(pl.col("model") == m)) for m in seeds):
+        fc = pl.concat([fc, seed_average(fc, seeds)], how="diagonal")
+        calib_model = "tft_seedavg"
+    if covers(fc.filter(pl.col("model") == calib_model)):
+        elog = ensemble_log(paths, fc, warm + scored, calib_model, cfg)
+        bands_out, calib = calibrate(elog, warm, scored, calib_model)
         bands_out.filter(pl.col("origin").is_in(scored)).write_parquet(
             target / "ensemble_bands.parquet"
         )
@@ -405,7 +492,8 @@ def score(
         log("deep score: no calibrated bands (tft has no forecasts for the warm-up origins)")
     n_lgbm_only = pred.height - common.height
     (target / "report.md").write_text(
-        _report(tables, models, deep_models, common.height, n_lgbm_only, calib), encoding="utf-8"
+        _report(tables, models, deep_models, common.height, n_lgbm_only, calib, cfg, calib_model),
+        encoding="utf-8",
     )
     log(f"deep score: {common.height:,} common rows ({n_lgbm_only:,} lgbm only) -> {target}")
     return tables
@@ -431,8 +519,19 @@ def seed_spread(tables: dict[str, pl.DataFrame], seeds: list[str]) -> pl.DataFra
     )
 
 
-def _report(tables, models, deep_models, n_common, n_lgbm_only, calib=None) -> str:
+def _report(
+    tables, models, deep_models, n_common, n_lgbm_only, calib=None, cfg=None, calib_model="tft"
+) -> str:
     md = bt._md
+    variant = []
+    if cfg is not None and cfg.variant:
+        variant = [
+            f"**Variant {cfg.variant}**: data cutoff = origin − {cfg.lag_days} days for every "
+            "model; " + bt.weather_line(cfg) + "LightGBM rows from "
+            f"`backtest/variants/{cfg.variant}/`. Horizon = days since the origin (days since "
+            f"the last data = {cfg.lag_days} + horizon).",
+            "",
+        ]
     o = tables["overall"]
     base = o.filter(pl.col("model") == "lgbm")["wape"][0]
     gain = o.select("model", "wape", (1 - pl.col("wape") / base).alias("gain_vs_lgbm")).sort("wape")
@@ -454,6 +553,7 @@ def _report(tables, models, deep_models, n_common, n_lgbm_only, calib=None) -> s
         [
             "# Deep models vs LightGBM (option C)",
             "",
+            *variant,
             f"Rows: {n_common:,} station-days scored by every model (same clean rows as the "
             f"LightGBM backtest, origins with deep forecasts); {n_lgbm_only:,} scored rows of "
             "those origins have no deep forecast (stations with < 365 days of clean history or "
@@ -482,7 +582,7 @@ def _report(tables, models, deep_models, n_common, n_lgbm_only, calib=None) -> s
             md(tables["bands"]),
             "",
             *_seed_section(tables),
-            *_calib_section(calib),
+            *_calib_section(calib, calib_model),
         ]
     )
 
@@ -501,7 +601,7 @@ def _seed_section(tables) -> list[str]:
     ]
 
 
-def _calib_section(calib) -> list[str]:
+def _calib_section(calib, name: str = "tft") -> list[str]:
     if calib is None:
         return []
     b = calib["bands"]
@@ -514,9 +614,10 @@ def _calib_section(calib) -> list[str]:
         )
 
     return [
-        "## Calibrated 80 % bands and P(busy): mean(lgbm, tft) vs lgbm",
+        f"## Calibrated 80 % bands and P(busy): mean(lgbm, {name}) vs lgbm",
         "Both calibrated on the same forecast log (12 warm-up + scored origins, rows with a TFT "
-        "forecast; residuals of the 365 days before each origin), scored on the same rows. "
+        "forecast; residuals of the 365 days before each origin's data cutoff), scored on the "
+        "same rows. "
         "`ens conformal` = ensemble point + residual quantiles; `ens cqr` = TFT's own 10/90 band "
         "conformalized. Acceptance: coverage 0.78–0.82 overall and per group, interval score "
         "below lgbm conformal.",
@@ -547,13 +648,29 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, help="export folder (default data/deep_colab)")
     parser.add_argument("--warmup", action="store_true", help="export: also the warm-up origins")
     parser.add_argument(
-        "--dir", type=Path, help="forecast folder (default data/deep_colab/outputs)"
+        "--production", action="store_true", help="export: inputs of the production forecast"
     )
+    parser.add_argument(
+        "--dir", type=Path, help="forecast folder (default data/deep_colab[/VARIANT]/outputs)"
+    )
+    parser.add_argument("--lag", type=int, help="publication lag in days (step 4 variant)")
+    parser.add_argument("--weather", choices=list(bt.WEATHER_MODES))
     a = parser.parse_args(argv)
     paths = bt.Paths.from_config()
-    default = paths.processed.parent / "deep_colab"
     cfg = bt.BacktestConfig.from_config()
-    if a.command == "export":
+    if a.lag is not None:
+        cfg = replace(cfg, lag_days=a.lag)
+    if a.weather:
+        cfg = replace(cfg, weather_mode=a.weather)
+    default = paths.processed.parent / "deep_colab"
+    if cfg.variant:
+        default = default / cfg.variant
+    if a.command == "export" and a.production:
+        from idf_crowding.models.forecast import cutoff_of
+
+        c = cutoff_of(pl.scan_parquet(paths.processed / "features_daily.parquet"))
+        export_production(cfg, a.out or paths.processed.parent / "deep_colab" / f"production_{c}")
+    elif a.command == "export":
         export(paths, cfg, a.out or default, warmup=a.warmup)
     else:
         score(paths, a.dir or default / "outputs", cfg)

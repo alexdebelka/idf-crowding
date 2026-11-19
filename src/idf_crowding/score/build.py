@@ -5,6 +5,8 @@
 Reads data/processed (features_daily, station_profiles, stations) and the stop reference
 in data/raw/idfm/reference (arrets-lignes, referentiel-des-lignes, zones-d-arrets, arrets).
 Writes data/processed/typical_week.parquet and <app_data_dir>/{index.json,places/*.json}.
+When data/processed/forecast/<cutoff>/forecast.parquet exists for the latest data cutoff,
+place files also carry the date forecasts (place.v2, score/dated.py).
 """
 
 from __future__ import annotations
@@ -13,15 +15,17 @@ import argparse
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import polars as pl
 
 from idf_crowding.config import REPO_ROOT, load_config
+from idf_crowding.features.calendar import load_public_holidays, load_school_holidays
 from idf_crowding.features.stations import last_quarters
-from idf_crowding.score import export
+from idf_crowding.score import dated, export
 from idf_crowding.score.places import assign, load_overrides
 from idf_crowding.score.reference import (
     KIND_ORDER,
@@ -112,6 +116,32 @@ def place_meta(
     return meta
 
 
+def date_forecasts(
+    paths: Paths,
+    data_end: Any,
+    members: pl.DataFrame,
+    hourly: pl.DataFrame,
+    levels: pl.DataFrame,
+    refs: pl.DataFrame,
+    now: datetime,
+) -> dict[str, Any] | None:
+    """The `forecast` input of export.place_records, or None without a production forecast."""
+    path = dated.latest_forecast(paths.processed, data_end + timedelta(days=1))
+    if path is None:
+        return None
+    fc = pl.read_parquet(path)
+    daily = dated.place_daily(fc, members)
+    reasons = dated.calendar_reasons(
+        daily["date"].unique(), load_public_holidays(paths.raw), load_school_holidays(paths.raw)
+    )
+    today = now.astimezone(ZoneInfo("Europe/Paris")).date()
+    return {
+        "issue_date": fc["issue_date"].max().isoformat(),
+        "data_end": fc["data_end"].max().isoformat(),
+        "dates": dated.date_records(daily, hourly, levels, refs, reasons, today),
+    }
+
+
 def build(
     paths: Paths, s: ScoreSettings, log: Callable[[str], None] = print, now: datetime | None = None
 ) -> list[dict[str, Any]]:
@@ -142,7 +172,10 @@ def build(
     names = {str(b): n for _, b, n in s.zdc_aliases if n}
     names.update({o.id: o.name for o in overrides})
     meta = place_meta(members, stations, lines, names)
-    records = export.place_records(hourly, levels, refs, meta, s, (start, end), periods, now)
+    forecast = date_forecasts(paths, end, members, hourly, levels, refs, now)
+    records = export.place_records(
+        hourly, levels, refs, meta, s, (start, end), periods, now, forecast
+    )
     index = export.index_record(records, s, (start, end), now)
 
     paths.processed.mkdir(parents=True, exist_ok=True)
@@ -156,6 +189,16 @@ def build(
         f"{len(records)} places in scope ({len(scope)} metro/RER/T4 stations in the reference), "
         f"{low} place x day types low-confidence; {len(files)} JSON files -> {paths.app_data}"
     )
+    if forecast is None:
+        log("score: no production forecast for this cutoff, place files are v1 (typical week)")
+    else:
+        n = [len(v) for v in forecast["dates"].values()]
+        days = sorted({d["d"] for v in forecast["dates"].values() for d in v})
+        span = f"{days[0]} -> {days[-1]}" if days else "no future dates"
+        log(
+            f"score: date forecasts (place.v2) for {len(n)} of {len(records)} places, {span}, "
+            f"issued {forecast['issue_date']}, data to {forecast['data_end']}"
+        )
     return records
 
 

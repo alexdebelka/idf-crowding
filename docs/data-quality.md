@@ -229,3 +229,28 @@ v0 **Typical week view**: one **Crowding score** per **Place** × **Day type** �
   against the portal's own geopoints (< 1e-7°).
 - Line badges: active metro, RER, Transilien and tram lines from `referentiel-des-lignes`
   (web colours). Validations are per Counting point, never per line.
+
+## Date forecasts in the app (`idf-score build` → `place.v2` files)
+When `data/processed/forecast/CUTOFF/forecast.parquet` exists for the latest data cutoff, each
+Place file is written as schema version 2 (`schemas/place.v2.schema.json`): every v1 field plus
+`forecast` (`issue_date`, `data_end`, `dates`). Without a forecast the files stay v1. Code:
+`score/dated.py`.
+- **Place × date**: daily = sum of the members' `point`, only on dates where every member has a
+  forecast and a day type.
+- **Band** (`lo`, `hi`, 80 %): the Counting point's band for single-member Places. For merged
+  Places it is null: summing member bands overstates the width, and a correct band needs the
+  summed forecast in the calibration log (not built; no merged Place exists today).
+- **Hours**: daily × the Place's typical-week profile of the date's day type (same profiles,
+  **Reference level** and bands as the typical week). Score = round(100 × hourly / reference).
+  A date whose day type has no profile for the Place is left out (none on the first run).
+- **Delta** (`delta_pct`): daily forecast vs the typical-week daily level of the same day type.
+  Hours share one profile, so the delta is the same for every hour and is stored once.
+- **Special days** keep the day type's hourly profile (24 and 31 December probably end
+  earlier): the hours of those days are less certain than the daily total.
+- **Reasons**: the forecast's special day (24, 25, 31 December, 1 January), then public
+  holiday, bridge day, school holidays (zone C) from the calendar sources.
+- **Past dates**: dates before the build day (Europe/Paris) are dropped; the app must also hide
+  dates that have passed since the build.
+- **Size**: hours are stored as 24 integer scores per date (operating-day order). First run
+  (built 2026-11-19): 538 Places × 84 dates (2026-11-19 → 2027-02-10), 22–25 KB per file
+  (v1: ≤ 9 KB).

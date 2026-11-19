@@ -1,4 +1,5 @@
-// Mirrors schemas/place.v1.schema.json and schemas/index.v1.schema.json (schema_version 1).
+// Mirrors schemas/place.v1.schema.json, place.v2.schema.json (v1 + `forecast`) and
+// index.v1.schema.json.
 export const DAY_TYPES = ["JOHV", "JOVS", "SAHV", "SAVS", "DIJFP"] as const;
 export type DayTypeCode = (typeof DAY_TYPES)[number];
 export type Band = "quiet" | "moderate" | "busy" | "very_busy";
@@ -39,8 +40,35 @@ export interface DayType {
   best_slots: { quietest: number[]; around_peaks: { peak: number; alternative: number }[] };
 }
 
+export type ForecastReason =
+  | "christmas_eve"
+  | "christmas_day"
+  | "new_years_eve"
+  | "new_years_day"
+  | "public_holiday"
+  | "bridge"
+  | "school_holidays";
+
+export interface ForecastDate {
+  d: string; // YYYY-MM-DD
+  day_type: DayTypeCode;
+  daily: number;
+  lo: number | null; // 80 % band; null for merged Places
+  hi: number | null;
+  delta_pct: number | null; // vs the typical week of day_type; the same for every hour
+  scores: number[]; // 24 Crowding scores, same hour order as DayType.hours
+  reasons: ForecastReason[];
+}
+
+export interface Forecast {
+  issue_date: string;
+  data_end: string;
+  dates: ForecastDate[];
+}
+
 export interface PlaceFile {
-  schema_version: 1;
+  schema_version: 1 | 2;
+  forecast?: Forecast; // schema_version 2
   generated_at: string;
   data_period: Period;
   profile_periods?: string[];

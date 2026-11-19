@@ -1,4 +1,5 @@
-"""Write the app's JSON contract (schemas/*.v1.schema.json): index.json + places/<id>.json."""
+"""Write the app's JSON contract: index.json (index.v1) + places/<id>.json (place.v1, or
+place.v2 when a production forecast exists: v1 fields + `forecast`)."""
 
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ import polars as pl
 from idf_crowding.score.typical import DAY_TYPES, OPERATING_HOURS, ScoreSettings, best_slots
 
 SCHEMA_VERSION = 1
+FORECAST_SCHEMA_VERSION = 2  # place files with a `forecast` block
 ATTRIBUTION = {
     "source": "Île-de-France Mobilités",
     "source_url": "https://data.iledefrance-mobilites.fr",
@@ -49,7 +51,9 @@ def place_records(
     period: tuple[date, date],
     profile_periods: list[str],
     generated_at: datetime,
+    forecast: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
+    """`forecast` = {issue_date, data_end, dates: {place_id: [...]}} (score/dated.py)."""
     lv = {(r["place_id"], r["day_type"]): r for r in levels.iter_rows(named=True)}
     ref = dict(zip(refs["place_id"], refs["reference_level"], strict=True))
     out = []
@@ -59,18 +63,24 @@ def place_records(
             rows = grp.filter(pl.col("day_type") == dt)
             if rows.height:
                 day_types[dt] = day_type_record(rows, lv[(pid, dt)], s)
-        out.append(
-            {
-                "schema_version": SCHEMA_VERSION,
-                "generated_at": generated_at.isoformat(timespec="seconds"),
-                "data_period": {"start": period[0].isoformat(), "end": period[1].isoformat()},
-                "profile_periods": profile_periods,
-                "place": meta[pid],
-                "reference_level": round(float(ref[pid]), 1),
-                "day_types": day_types,
-                "attribution": ATTRIBUTION,
+        rec = {
+            "schema_version": SCHEMA_VERSION,
+            "generated_at": generated_at.isoformat(timespec="seconds"),
+            "data_period": {"start": period[0].isoformat(), "end": period[1].isoformat()},
+            "profile_periods": profile_periods,
+            "place": meta[pid],
+            "reference_level": round(float(ref[pid]), 1),
+            "day_types": day_types,
+            "attribution": ATTRIBUTION,
+        }
+        if forecast is not None:
+            rec["schema_version"] = FORECAST_SCHEMA_VERSION
+            rec["forecast"] = {
+                "issue_date": forecast["issue_date"],
+                "data_end": forecast["data_end"],
+                "dates": forecast["dates"].get(pid, []),
             }
-        )
+        out.append(rec)
     return out
 
 

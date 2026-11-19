@@ -1,0 +1,422 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/idf-crowding/schemas/place.v2.schema.json",
+  "title": "Place typical week + date forecasts (schema_version 2)",
+  "description": "app/public/data/places/<id>.json, written by `idf-score build` when a production forecast exists. All place.v1 fields, plus `forecast`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "data_period",
+    "place",
+    "reference_level",
+    "day_types",
+    "attribution",
+    "forecast"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 2
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "data_period": {
+      "$ref": "#/$defs/period"
+    },
+    "profile_periods": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^\\d{4}Q[1-4]$"
+      }
+    },
+    "place": {
+      "$ref": "#/$defs/place"
+    },
+    "reference_level": {
+      "type": "number",
+      "exclusiveMinimum": 0,
+      "description": "Entries per hour that score 100"
+    },
+    "day_types": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "JOHV": {
+          "$ref": "#/$defs/dayType"
+        },
+        "JOVS": {
+          "$ref": "#/$defs/dayType"
+        },
+        "SAHV": {
+          "$ref": "#/$defs/dayType"
+        },
+        "SAVS": {
+          "$ref": "#/$defs/dayType"
+        },
+        "DIJFP": {
+          "$ref": "#/$defs/dayType"
+        }
+      }
+    },
+    "attribution": {
+      "$ref": "#/$defs/attribution"
+    },
+    "forecast": {
+      "$ref": "#/$defs/forecast"
+    }
+  },
+  "$defs": {
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "start": {
+          "type": "string",
+          "format": "date"
+        },
+        "end": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "hour": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 23
+    },
+    "band": {
+      "enum": [
+        "quiet",
+        "moderate",
+        "busy",
+        "very_busy"
+      ]
+    },
+    "line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "kind"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "metro",
+            "rer",
+            "transilien",
+            "tram"
+          ]
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9a-f]{6}$"
+        },
+        "text_color": {
+          "type": "string",
+          "pattern": "^#[0-9a-f]{6}$"
+        }
+      }
+    },
+    "place": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "station_ids",
+        "lines"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "town": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "lat": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 47,
+          "maximum": 50
+        },
+        "lon": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0.5,
+          "maximum": 4
+        },
+        "station_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "integer"
+          }
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/line"
+          }
+        }
+      }
+    },
+    "dayType": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hours",
+        "daily_entries",
+        "n_days",
+        "low_confidence",
+        "best_slots"
+      ],
+      "properties": {
+        "hours": {
+          "type": "array",
+          "minItems": 24,
+          "maxItems": 24,
+          "description": "Operating-day order 04:00 -> 03:00",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "h",
+              "expected_entries",
+              "score",
+              "band"
+            ],
+            "properties": {
+              "h": {
+                "$ref": "#/$defs/hour"
+              },
+              "expected_entries": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "score": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "band": {
+                "$ref": "#/$defs/band"
+              }
+            }
+          }
+        },
+        "daily_entries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "n_days": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "low_confidence": {
+          "type": "boolean"
+        },
+        "best_slots": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "quietest",
+            "around_peaks"
+          ],
+          "properties": {
+            "quietest": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/hour"
+              }
+            },
+            "around_peaks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "peak",
+                  "alternative"
+                ],
+                "properties": {
+                  "peak": {
+                    "$ref": "#/$defs/hour"
+                  },
+                  "alternative": {
+                    "$ref": "#/$defs/hour"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "attribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "source_url",
+        "license",
+        "license_url"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "source_url": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string"
+        },
+        "license_url": {
+          "type": "string"
+        }
+      }
+    },
+    "dayTypeCode": {
+      "enum": [
+        "JOHV",
+        "JOVS",
+        "SAHV",
+        "SAVS",
+        "DIJFP"
+      ]
+    },
+    "forecast": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "issue_date",
+        "data_end",
+        "dates"
+      ],
+      "properties": {
+        "issue_date": {
+          "type": "string",
+          "format": "date",
+          "description": "Day the forecast was made"
+        },
+        "data_end": {
+          "type": "string",
+          "format": "date",
+          "description": "Last day of published validations the forecast uses"
+        },
+        "dates": {
+          "type": "array",
+          "description": "Date order, from the build day on",
+          "items": {
+            "$ref": "#/$defs/forecastDate"
+          }
+        }
+      }
+    },
+    "forecastDate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "d",
+        "day_type",
+        "daily",
+        "lo",
+        "hi",
+        "delta_pct",
+        "scores",
+        "reasons"
+      ],
+      "properties": {
+        "d": {
+          "type": "string",
+          "format": "date"
+        },
+        "day_type": {
+          "$ref": "#/$defs/dayTypeCode"
+        },
+        "daily": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Forecast entries for the day"
+        },
+        "lo": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "80 % band, lower bound; null for merged Places"
+        },
+        "hi": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "80 % band, upper bound; null for merged Places"
+        },
+        "delta_pct": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Daily forecast vs the typical-week level of day_type, in percent; the same for every hour"
+        },
+        "scores": {
+          "type": "array",
+          "minItems": 24,
+          "maxItems": 24,
+          "description": "Crowding score per hour, operating-day order 04:00 -> 03:00 (as day_types.*.hours). Entries of an hour = daily x expected_entries / daily_entries of day_type; same share for lo and hi.",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "reasons": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "christmas_eve",
+              "christmas_day",
+              "new_years_eve",
+              "new_years_day",
+              "public_holiday",
+              "bridge",
+              "school_holidays"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

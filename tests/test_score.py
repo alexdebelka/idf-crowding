@@ -9,7 +9,7 @@ import pytest
 from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
-from idf_crowding.score import export
+from idf_crowding.score import dated, export
 from idf_crowding.score.build import Paths, build
 from idf_crowding.score.places import PlaceOverride, assign, load_overrides
 from idf_crowding.score.reference import (
@@ -20,6 +20,7 @@ from idf_crowding.score.reference import (
     stop_lines_from,
 )
 from idf_crowding.score.typical import (
+    OPERATING_HOURS,
     ScoreSettings,
     band_expr,
     best_slots,
@@ -36,17 +37,18 @@ S = ScoreSettings()
 SCHEMAS = Path(__file__).resolve().parents[1] / "schemas"
 
 
-def validator(name: str) -> Draft202012Validator:
+def validator(name: str, version: int = 1) -> Draft202012Validator:
+    files = ["place.v1", "index.v1", "place.v2"]
     res = {
-        f"{n}.v1.schema.json": Resource.from_contents(
-            json.loads((SCHEMAS / f"{n}.v1.schema.json").read_text())
+        f"{n}.schema.json": Resource.from_contents(
+            json.loads((SCHEMAS / f"{n}.schema.json").read_text())
         )
-        for n in ("place", "index")
+        for n in files
     }
     reg = Registry().with_resources(
         [(k, v) for k, v in res.items()] + [(v.contents["$id"], v) for v in res.values()]
     )
-    return Draft202012Validator(res[f"{name}.v1.schema.json"].contents, registry=reg)
+    return Draft202012Validator(res[f"{name}.v{version}.schema.json"].contents, registry=reg)
 
 
 def feat(rows):
@@ -350,3 +352,145 @@ def test_schema_rejects_unknown_band():
         "attribution": export.ATTRIBUTION,
     }
     assert not validator("place").is_valid(bad)
+
+
+# --- Date forecasts (place.v2, docs/data-quality.md "Date forecasts in the app") ---
+
+
+def fc_rows(rows):
+    cols = ["station_id", "date", "point", "lo", "hi", "day_type", "special_day"]
+    return pl.DataFrame(rows, schema=cols, orient="row").with_columns(
+        pl.col("point", "lo", "hi").cast(pl.Float64),
+        pl.col("special_day").cast(pl.String),
+        pl.lit(date(2026, 11, 18)).alias("issue_date"),
+        pl.lit(date(2026, 3, 15)).alias("data_end"),
+    )
+
+
+F = date(2026, 12, 24)  # Thursday
+
+
+def test_place_daily_sums_members_and_needs_all_of_them():
+    members = assign([1, 2, 3], [PlaceOverride("hub", "Hub", (1, 2))])
+    fc = fc_rows(
+        [
+            (1, F, 100, 80, 120, "JOVS", None),
+            (2, F, 50, 40, 60, "JOVS", None),
+            (1, F + timedelta(1), 100, 80, 120, "DIJFP", None),  # member 2 missing
+            (3, F, 10, 8, 12, "JOVS", None),
+            (3, F + timedelta(1), 10, 8, 12, None, None),  # no day type
+        ]
+    )
+    out = dated.place_daily(fc, members)
+    assert out.select("place_id", "date", "point").rows() == [("3", F, 10.0), ("hub", F, 150.0)]
+
+
+def test_place_daily_band_only_for_single_station_places():
+    # Summing member bands overstates the width: merged Places get no band until it is
+    # computed on the summed forecast.
+    members = assign([1, 2, 3], [PlaceOverride("hub", "Hub", (1, 2))])
+    fc = fc_rows(
+        [
+            (1, F, 100, 80, 120, "JOVS", None),
+            (2, F, 50, 40, 60, "JOVS", None),
+            (3, F, 10, 8, 12, "JOVS", None),
+        ]
+    )
+    out = {r["place_id"]: r for r in dated.place_daily(fc, members).to_dicts()}
+    assert (out["3"]["lo"], out["3"]["hi"]) == (8.0, 12.0)
+    assert (out["hub"]["lo"], out["hub"]["hi"]) == (None, None)
+
+
+def test_calendar_reasons_from_holiday_sources():
+    hol = pl.DataFrame({"date": [date(2026, 12, 25)]})
+    r = dated.calendar_reasons(pl.Series([F, F + timedelta(1)]), hol, None)
+    assert r == {F: [], F + timedelta(1): ["public_holiday"]}
+
+
+def test_date_records_score_delta_reasons_and_past_dates():
+    daily = dated.place_daily(
+        fc_rows(
+            [
+                (1, F - timedelta(1), 900, 800, 1000, "JOVS", None),  # before today
+                (1, F, 1200, 1000, 1500.4, "JOVS", "christmas_eve"),
+                (1, F + timedelta(2), 500, 400, 600, "SAVS", None),  # no SAVS profile
+            ]
+        ),
+        assign([1], []),
+    )
+    hourly = pl.DataFrame(
+        {"place_id": ["1", "1"], "day_type": ["JOVS", "JOVS"], "hour": [8, 18], "share": [0.6, 0.4]}
+    )
+    levels = pl.DataFrame({"place_id": ["1"], "day_type": ["JOVS"], "daily_entries": [1000.0]})
+    refs = pl.DataFrame({"place_id": ["1"], "reference_level": [400.0]})
+    out = dated.date_records(daily, hourly, levels, refs, {F: ["school_holidays"]}, F)
+    (rec,) = out["1"]
+    assert rec["d"] == "2026-12-24" and rec["day_type"] == "JOVS"
+    assert (rec["daily"], rec["lo"], rec["hi"], rec["delta_pct"]) == (1200, 1000, 1500, 20)
+    by_hour = dict(zip(OPERATING_HOURS, rec["scores"], strict=True))
+    assert by_hour[8] == 180 and by_hour[18] == 120 and sum(rec["scores"]) == 300
+    assert rec["reasons"] == ["christmas_eve", "school_holidays"]
+
+
+def write_forecast(paths: Paths, n_days: int = 85) -> date:
+    """forecast.parquet for the fixture's cutoff (data ends 2026-03-15)."""
+    start = date(2026, 11, 18)
+    rows = []
+    for i in range(n_days):
+        d = start + timedelta(i)
+        wd = d.isoweekday()
+        dt = "DIJFP" if wd == 7 else ("SAHV" if wd == 6 else "JOHV")
+        special = "christmas_day" if (d.month, d.day) == (12, 25) else None
+        for sid, base in [(71264, 1100), (60001, 55)]:
+            rows.append((sid, d, base, base * 0.9, base * 1.1, dt, special))
+    out = paths.processed / "forecast" / "2026-03-16"
+    out.mkdir(parents=True)
+    fc_rows(rows).write_parquet(out / "forecast.parquet")
+    return start
+
+
+def test_build_with_forecast_writes_valid_v2(tmp_path):
+    paths = write_fixture(tmp_path)
+    start = write_forecast(paths)
+    now = datetime(2026, 11, 20, 8, tzinfo=UTC)
+    build(paths, S, log=lambda _: None, now=now)
+    place = json.loads((paths.app_data / "places/71264.json").read_text())
+    validator("place", 2).validate(place)
+    validator("index").validate(json.loads((paths.app_data / "index.json").read_text()))
+    fc = place["forecast"]
+    assert (fc["issue_date"], fc["data_end"]) == ("2026-11-18", "2026-03-15")
+    dates = fc["dates"]
+    assert dates[0]["d"] == "2026-11-20" and len(dates) == 85 - (date(2026, 11, 20) - start).days
+    first = dates[0]  # Friday, JOHV: typical level 1000 -> +10 %, same profile as v1
+    assert first["delta_pct"] == 10 and (first["lo"], first["hi"]) == (990, 1210)
+    typical = [h["score"] for h in place["day_types"]["JOHV"]["hours"]]
+    assert first["scores"] == [
+        round(1.1 * 100 * 1000 * sh / place["reference_level"])
+        for sh in [0.1 if h in (8, 18) else 0.8 / 22 for h in OPERATING_HOURS]
+    ]
+    assert max(first["scores"]) > max(typical)
+    xmas = next(d for d in dates if d["d"] == "2026-12-25")
+    assert xmas["reasons"] == ["christmas_day"]
+    assert len(json.dumps(place, separators=(",", ":"))) < 25_000
+
+
+def test_build_without_forecast_stays_v1(tmp_path):
+    paths = write_fixture(tmp_path)
+    build(paths, S, log=lambda _: None, now=datetime(2026, 11, 20, tzinfo=UTC))
+    place = json.loads((paths.app_data / "places/71264.json").read_text())
+    assert place["schema_version"] == 1 and "forecast" not in place
+    validator("place").validate(place)
+
+
+def test_schema_v2_rejects_short_scores_and_unknown_reason(tmp_path):
+    paths = write_fixture(tmp_path)
+    write_forecast(paths, 5)
+    build(paths, S, log=lambda _: None, now=datetime(2026, 11, 18, tzinfo=UTC))
+    place = json.loads((paths.app_data / "places/71264.json").read_text())
+    v = validator("place", 2)
+    assert v.is_valid(place)
+    place["forecast"]["dates"][0]["scores"].pop()
+    assert not v.is_valid(place)
+    place["forecast"]["dates"][0]["scores"].append(0)
+    place["forecast"]["dates"][0]["reasons"] = ["rain"]
+    assert not v.is_valid(place)

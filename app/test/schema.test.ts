@@ -1,4 +1,4 @@
-// The JSON contract (schemas/*.v1.schema.json) checked from the TypeScript side.
+// The JSON contract (schemas/*.schema.json) checked from the TypeScript side.
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import Ajv2020 from "ajv/dist/2020";
@@ -14,10 +14,13 @@ function validators() {
   addFormats(ajv);
   const place = load(path.join(SCHEMAS, "place.v1.schema.json"));
   const index = load(path.join(SCHEMAS, "index.v1.schema.json"));
+  const place2 = load(path.join(SCHEMAS, "place.v2.schema.json"));
   ajv.addSchema(place, "place.v1.schema.json");
+  ajv.addSchema(place2, "place.v2.schema.json");
   ajv.addSchema(index, "index.v1.schema.json");
   return {
     place: ajv.getSchema("place.v1.schema.json")!,
+    place2: ajv.getSchema("place.v2.schema.json")!,
     index: ajv.getSchema("index.v1.schema.json")!,
   };
 }
@@ -30,12 +33,13 @@ function check(dir: string) {
   expect(files.length).toBe(index.places.length);
   for (const f of files) {
     const p = load(path.join(dir, "places", f)) as PlaceFile;
-    expect(v.place(p), `${f}: ${JSON.stringify(v.place.errors)}`).toBe(true);
+    const validate = p.schema_version === 2 ? v.place2 : v.place;
+    expect(validate(p), `${f}: ${JSON.stringify(validate.errors)}`).toBe(true);
     expect(p.place.id).toBe(f.replace(/\.json$/, ""));
   }
 }
 
-describe("JSON contract v1", () => {
+describe("JSON contract", () => {
   it("fixtures validate", () => check(path.resolve(__dirname, "fixtures")));
 
   it("rejects a wrong band and a missing hour", () => {
@@ -46,6 +50,36 @@ describe("JSON contract v1", () => {
     const q = load(path.resolve(__dirname, "fixtures/places/71264.json"));
     q.day_types.JOHV.hours.pop();
     expect(v.place(q)).toBe(false);
+  });
+
+  it("v2 adds date forecasts to a v1 file", () => {
+    const v = validators();
+    const p = load(path.resolve(__dirname, "fixtures/places/71264.json")) as PlaceFile;
+    const scores = p.day_types.JOHV!.hours.map((h) => h.score);
+    const v2 = {
+      ...p,
+      schema_version: 2,
+      forecast: {
+        issue_date: "2026-11-18",
+        data_end: "2026-06-30",
+        dates: [
+          {
+            d: "2026-12-24",
+            day_type: "JOHV",
+            daily: 1000,
+            lo: 900,
+            hi: 1100,
+            delta_pct: -3,
+            scores,
+            reasons: ["christmas_eve", "school_holidays"],
+          },
+        ],
+      },
+    };
+    expect(v.place2(v2), JSON.stringify(v.place2.errors)).toBe(true);
+    expect(v.place(v2)).toBe(false);
+    v2.forecast.dates[0].scores = scores.slice(1);
+    expect(v.place2(v2)).toBe(false);
   });
 
   const real = path.resolve(__dirname, "../public/data");

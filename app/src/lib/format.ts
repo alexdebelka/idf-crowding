@@ -1,4 +1,4 @@
-import type { DayTypeCode, HourRow } from "./types";
+import type { HourRow } from "./types";
 
 /** "08:00" */
 export const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
@@ -28,12 +28,4 @@ export function roundEntries(n: number): number {
   if (n < 100) return Math.round(n / 5) * 5;
   if (n < 1000) return Math.round(n / 10) * 10;
   return Math.round(n / 100) * 100;
-}
-
-/** Most likely day type for a date, ignoring school holidays and public holidays. */
-export function defaultDayType(d: Date): DayTypeCode {
-  const wd = d.getDay();
-  if (wd === 0) return "DIJFP";
-  if (wd === 6) return "SAHV";
-  return "JOHV";
 }

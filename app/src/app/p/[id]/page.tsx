@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { PlaceView } from "@/components/PlaceView";
+import { StationScreen } from "@/components/station/StationScreen";
 import { getIndex, getPlace } from "@/lib/data";
+import { bandRules } from "@/lib/state";
 
 export const dynamicParams = false;
 
@@ -13,11 +14,11 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   const p = getPlace(id).place;
   return {
     title: p.name,
-    description: `Affluence heure par heure à ${p.name}${p.town ? ` (${p.town})` : ""} : quand partir pour éviter la foule.`,
+    description: `L’affluence prévue à ${p.name}${p.town ? ` (${p.town})` : ""}, heure par heure, aujourd’hui et pour une date choisie.`,
   };
 }
 
 export default async function PlacePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <PlaceView data={getPlace(id)} />;
+  return <StationScreen data={getPlace(id)} bands={bandRules(getIndex())} />;
 }

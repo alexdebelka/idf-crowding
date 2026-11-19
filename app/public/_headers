@@ -1,0 +1,42 @@
+# Cloudflare Workers static assets: custom headers (ADR 0003).
+# Syntax and limits: one block per URL pattern, indented "name: value" lines, at most 100
+# rules and 2,000 characters per line. Every matching block applies, and a header set twice
+# is joined with a comma, which is invalid for Cache-Control: so the Cache-Control blocks
+# below never overlap. HTML and the Next.js .txt payloads keep Cloudflare's default
+# (public, max-age=0, must-revalidate, with an ETag).
+
+# Security headers on every response.
+# CSP: the site's own origin only. 'unsafe-inline' is needed for scripts because the Next.js
+# static export inlines its bootstrap and payload in each page (hashes would differ per page
+# and per build) and for styles because components use style attributes. No 'unsafe-eval'.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; media-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+  Referrer-Policy: no-referrer
+  X-Content-Type-Options: nosniff
+  Permissions-Policy: accelerometer=(), browsing-topics=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()
+
+# Hashed build output: never changes under the same name.
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Self-hosted fonts (OFL): long. Rename the file if a font is ever replaced.
+/fonts/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# Brand files and icons: a month.
+/brand/*
+  Cache-Control: public, max-age=2592000
+/icons/*
+  Cache-Control: public, max-age=2592000
+
+# Data: short and revalidated (conditional request, 304 when unchanged), so that a monthly
+# release shows up within minutes. The service worker also revalidates on every use.
+/data/*
+  Cache-Control: public, max-age=300, must-revalidate
+
+# The service worker and the manifest are always revalidated.
+/sw.js
+  Cache-Control: public, max-age=0, must-revalidate
+/manifest.webmanifest
+  Content-Type: application/manifest+json
+  Cache-Control: public, max-age=0, must-revalidate

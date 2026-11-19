@@ -1,0 +1,46 @@
+{
+ "schema_version": 1,
+ "generated_at": "2026-11-19T08:00:00+00:00",
+ "log": {
+  "variant": "lag120_prod",
+  "lag_days": 120,
+  "weather": "production",
+  "model": "ens_lgbm_tft_seedavg",
+  "model_label": "mean(LightGBM, TFT mean of 3 seeds)",
+  "n_origins": 12,
+  "origins": {
+   "first": "2025-06-01",
+   "last": "2026-05-01"
+  },
+  "period": {
+   "start": "2025-06-01",
+   "end": "2026-06-29"
+  },
+  "days_since_data": {
+   "min": 121,
+   "max": 180
+  }
+ },
+ "min_days": 180,
+ "day_definition": "distinct dates with at least one scored forecast",
+ "places": {
+  "n_places": 538,
+  "n_with_figure": 536,
+  "median_pct": 8.4,
+  "p90_pct": 17.0
+ },
+ "tiles": {
+  "station_wape_pct": 10.1,
+  "network_wape_pct": 5.5,
+  "band": {
+   "level": 0.8,
+   "coverage": 0.806
+  },
+  "special_days": {
+   "wape_pct": 13.3,
+   "season": 2025,
+   "n_rows": 4972,
+   "method": "LightGBM x special-day factor"
+  }
+ }
+}

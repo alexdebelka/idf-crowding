@@ -10,6 +10,7 @@
     "lint": "eslint . && tsc --noEmit",
     "test": "vitest run",
     "fixtures": "node scripts/use-fixtures.mjs",
+    "check:export": "node scripts/check-export.mjs out",
     "check": "npm run lint && npm run test"
   },
   "dependencies": {

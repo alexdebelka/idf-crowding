@@ -1,0 +1,188 @@
+// Strings shared by every screen. French numbers keep a no-break space before « h », « % » and « : ».
+// French is the reference; `en` must keep the same shape.
+import type { Band, DayTypeCode, ForecastReason } from "../types";
+
+const fr = {
+  appName: "à point",
+  homeLabel: "à point, accueil",
+  method: "Méthode",
+  close: "Fermer",
+  language: "Langue",
+  lines: "Lignes",
+  today: "Aujourd’hui",
+  chooseDate: "Choisir une date",
+  changeStation: "Changer de gare",
+  howComputed: "Comment c’est calculé",
+  promise: "Gratuit, sans compte, sans traceur.",
+
+  /** Headline of a "now" screen: the band in words (design spec, section 2). */
+  headline: {
+    quiet: "Calme.",
+    moderate: "Assez calme.",
+    busy: "Chargé.",
+    very_busy: "Très chargé.",
+  } satisfies Record<Band, string>,
+  band: {
+    quiet: "Calme",
+    moderate: "Assez calme",
+    busy: "Chargé",
+    very_busy: "Très chargé",
+  } satisfies Record<Band, string>,
+
+  /** Hour in a sentence and under a bar. */
+  hour: (h: number) => `${h}\u00a0h`,
+  hourShort: (h: number) => `${h}\u00a0h`,
+
+  // "Now" summaries: facts about entries, never advice (spec, section 5).
+  nowBusy: "Beaucoup d’entrées en ce moment.",
+  nowBusyAllDay: "Beaucoup d’entrées en ce moment, et jusqu’à la fin de la journée.",
+  calmerAround: (less: string, hour: string) => `${less} vers ${hour}.`,
+  lessHalf: "Moitié moins",
+  lessPct: (n: number) => `Environ ${n}\u00a0% de moins`,
+  lessSlight: "Un peu moins",
+  nowQuietUntil: (hour: string) => `Peu d’entrées en ce moment, et jusqu’à ${hour} environ.`,
+  nowQuietAllDay: "Peu d’entrées en ce moment, et jusqu’à la fin de la journée.",
+  nowModerateUntil: (hour: string) =>
+    `Entrées modérées en ce moment. Plus d’entrées à partir de ${hour}.`,
+  nowModerateAllDay: "Entrées modérées en ce moment, et jusqu’à la fin de la journée.",
+  nowOffHours: "Presque aucune entrée à cette heure.",
+  // One-line facts on the home tiles.
+  tileBusyAllDay: "Beaucoup d’entrées jusqu’à la fin de la journée.",
+  tileQuietUntil: (hour: string) => `Peu d’entrées jusqu’à ${hour} environ.`,
+  tileQuietAllDay: "Peu d’entrées jusqu’à la fin de la journée.",
+  tileModerateUntil: (hour: string) => `Plus d’entrées à partir de ${hour}.`,
+
+  // Chosen date.
+  dayBusiest: (from: string, to: string) => `Plus chargé de ${from} à ${to}.`,
+  dayCalmest: (from: string, to: string) => `Le plus calme entre ${from} et ${to}.`,
+  dayNoData: "Pas de prévision pour cette date.",
+  deltaMore: (n: number, usual: string) => `Environ ${n}\u00a0% de plus qu’${usual}.`,
+  deltaLess: (n: number, usual: string) => `Environ ${n}\u00a0% de moins qu’${usual}.`,
+  deltaSame: (usual: string) => `Comme ${usual}.`,
+  /** The typical day the delta is measured against (the date's day type, not its weekday). */
+  usualDay: {
+    JOHV: "un jour de semaine habituel",
+    JOVS: "un jour de semaine de vacances scolaires",
+    SAHV: "un samedi habituel",
+    SAVS: "un samedi de vacances scolaires",
+    DIJFP: "un dimanche ou jour férié habituel",
+  } satisfies Record<DayTypeCode, string>,
+  reason: {
+    christmas_eve: "veille de Noël",
+    christmas_day: "Noël",
+    new_years_eve: "Saint-Sylvestre",
+    new_years_day: "jour de l’An",
+    public_holiday: "jour férié",
+    bridge: "pont",
+    school_holidays: "vacances scolaires",
+  } satisfies Record<ForecastReason, string>,
+  dataUntil: (date: string) => `Prévision calculée avec les données publiées jusqu’au ${date}.`,
+  specialDayNote: "Les heures de ce jour particulier sont moins sûres.",
+  typicalNote: "Pas encore de prévision pour cette date : semaine type de la gare.",
+  stationAccuracy: (pct: string) => `Pour cette gare\u00a0: écart moyen de ${pct}\u00a0%.`,
+
+  // Chart.
+  chartLabel: "Affluence heure par heure, de 5\u00a0h à 1\u00a0h.",
+  chartScrollHint: "Faites défiler.",
+  legendNow: "maintenant",
+  legendCalmer: "prochaine heure plus calme",
+  legendBusiest: "heures les plus chargées",
+  legendCalmest: "heures les plus calmes",
+  tableCaption: "Affluence heure par heure",
+  tableHour: "Heure",
+  tableScore: "Score (100 = repère de la gare)",
+  tableBand: "Niveau",
+
+  attribution: "Données : Île-de-France Mobilités, licence ODbL. Code ouvert, licence MIT.",
+  independent: "Projet indépendant, sans lien avec Île-de-France Mobilités, la RATP ou la SNCF.",
+  notFound: "Gare introuvable.",
+  backHome: "Toutes les gares",
+};
+
+export type CommonStrings = typeof fr;
+
+// English reviewed (British spelling, 24-hour clock, entries described, never advice).
+const en: CommonStrings = {
+  appName: "à point",
+  homeLabel: "à point, home",
+  method: "Method",
+  close: "Close",
+  language: "Language",
+  lines: "Lines",
+  today: "Today",
+  chooseDate: "Choose a date",
+  changeStation: "Change station",
+  howComputed: "How it is calculated",
+  promise: "Free, no account, no trackers.",
+  headline: {
+    quiet: "Calm.",
+    moderate: "Fairly calm.",
+    busy: "Busy.",
+    very_busy: "Very busy.",
+  },
+  band: {
+    quiet: "Calm",
+    moderate: "Fairly calm",
+    busy: "Busy",
+    very_busy: "Very busy",
+  },
+  hour: (h: number) => `${String(h).padStart(2, "0")}:00`,
+  hourShort: (h: number) => String(h).padStart(2, "0"),
+  nowBusy: "Many entries right now.",
+  nowBusyAllDay: "Many entries right now, and until the end of the day.",
+  calmerAround: (less: string, hour: string) => `${less} around ${hour}.`,
+  lessHalf: "Half as many",
+  lessPct: (n: number) => `About ${n}% fewer`,
+  lessSlight: "Slightly fewer",
+  nowQuietUntil: (hour: string) => `Few entries right now, and until about ${hour}.`,
+  nowQuietAllDay: "Few entries right now, and until the end of the day.",
+  nowModerateUntil: (hour: string) => `Entries are moderate right now. More from ${hour}.`,
+  nowModerateAllDay: "Entries are moderate right now, and until the end of the day.",
+  nowOffHours: "Almost no entries at this hour.",
+  tileBusyAllDay: "Many entries until the end of the day.",
+  tileQuietUntil: (hour: string) => `Few entries until about ${hour}.`,
+  tileQuietAllDay: "Few entries until the end of the day.",
+  tileModerateUntil: (hour: string) => `More entries from ${hour}.`,
+  dayBusiest: (from: string, to: string) => `Busiest from ${from} to ${to}.`,
+  dayCalmest: (from: string, to: string) => `Calmest between ${from} and ${to}.`,
+  dayNoData: "No forecast for this date.",
+  deltaMore: (n: number, usual: string) => `About ${n}% more than ${usual}.`,
+  deltaLess: (n: number, usual: string) => `About ${n}% less than ${usual}.`,
+  deltaSame: (usual: string) => `About the same as ${usual}.`,
+  usualDay: {
+    JOHV: "a typical weekday",
+    JOVS: "a typical school-holiday weekday",
+    SAHV: "a typical Saturday",
+    SAVS: "a typical school-holiday Saturday",
+    DIJFP: "a typical Sunday or public holiday",
+  },
+  reason: {
+    christmas_eve: "Christmas Eve",
+    christmas_day: "Christmas Day",
+    new_years_eve: "New Year’s Eve",
+    new_years_day: "New Year’s Day",
+    public_holiday: "public holiday",
+    bridge: "bridge day",
+    school_holidays: "school holidays",
+  },
+  dataUntil: (date: string) => `Forecast calculated from data published up to ${date}.`,
+  specialDayNote: "Hourly figures for this special day are less certain.",
+  typicalNote: "No forecast for this date yet; showing the station’s typical week.",
+  stationAccuracy: (pct: string) => `For this station: average error of ${pct}%.`,
+  chartLabel: "Crowding hour by hour, from 05:00 to 01:00.",
+  chartScrollHint: "Scroll sideways.",
+  legendNow: "now",
+  legendCalmer: "next calmer hour",
+  legendBusiest: "busiest hours",
+  legendCalmest: "calmest hours",
+  tableCaption: "Crowding hour by hour",
+  tableHour: "Hour",
+  tableScore: "Score (100 = the station’s reference level)",
+  tableBand: "Level",
+  attribution: "Data: Île-de-France Mobilités, ODbL licence. Open-source code, MIT licence.",
+  independent: "Independent project, not affiliated with Île-de-France Mobilités, RATP or SNCF.",
+  notFound: "Station not found.",
+  backHome: "All stations",
+};
+
+export const common = { fr, en };

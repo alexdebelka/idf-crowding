@@ -35,3 +35,5 @@ jobs:
       - run: npm run fixtures
       - run: npm run build
       - run: test -f out/index.html && test -f out/p/71264/index.html
+      # Guard for "sans traceur": no request to another origin, no tracker, PWA files present.
+      - run: node scripts/check-export.mjs out

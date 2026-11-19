@@ -1,9 +1,13 @@
-// Cloudflare Workers static assets (ADR 0001): serves app/out, no Worker code.
+// Cloudflare Workers static assets (ADR 0001, ADR 0003): serves app/out, no Worker code.
+// Headers come from public/_headers (copied to out/_headers by the build).
 {
   "name": "idf-crowding",
   "compatibility_date": "2026-10-01",
   "assets": {
     "directory": "./out",
+    // trailingSlash export: /a-propos/ is out/a-propos/index.html (this is also Cloudflare's default)
+    "html_handling": "auto-trailing-slash",
+    // unknown paths: out/404.html with a 404 status
     "not_found_handling": "404-page"
   }
 }

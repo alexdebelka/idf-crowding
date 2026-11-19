@@ -1,34 +1,44 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { Footer, Header } from "@/components/Chrome";
 import { I18nProvider } from "@/components/I18n";
-import { getIndex } from "@/lib/data";
+import { RegisterSW } from "@/components/pwa/RegisterSW";
 
 export const metadata: Metadata = {
-  title: { default: "Quai libre — affluence des gares de métro et RER", template: "%s · Quai libre" },
+  title: { default: "à point : l’affluence des gares de métro et de RER", template: "%s · à point" },
   description:
-    "Quand prendre le métro ou le RER en Île-de-France pour éviter la foule : affluence heure par heure, d’après les données ouvertes de validation.",
+    "L’affluence prévue dans les gares de métro et de RER d’Île-de-France, jour par jour et heure par heure, à partir des données ouvertes de validation. Gratuit, sans compte, sans traceur.",
+  applicationName: "à point",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [{ url: "/brand/favicon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+  },
+  appleWebApp: { capable: true, title: "à point", statusBarStyle: "default" },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#0b2545" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b1626" },
-  ],
+  viewportFit: "cover",
+  themeColor: "#F6F7F4",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const index = getIndex();
   return (
     <html lang="fr">
+      <head>
+        <link
+          rel="preload"
+          href="/fonts/onest-latin-wght-normal.woff2"
+          as="font"
+          type="font/woff2"
+          crossOrigin="anonymous"
+        />
+      </head>
       <body>
-        <I18nProvider>
-          <Header />
-          <main className="wrap">{children}</main>
-          <Footer attribution={index.attribution} period={index.data_period} />
-        </I18nProvider>
+        <I18nProvider>{children}</I18nProvider>
+        <RegisterSW />
       </body>
     </html>
   );

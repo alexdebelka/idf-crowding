@@ -25,6 +25,7 @@ export function getIndex(): IndexFile {
 
 export function getPlace(id: string): PlaceFile {
   const p = read<PlaceFile>(path.join("places", `${id}.json`));
-  if (p.schema_version !== 1) throw new Error(`unsupported schema_version ${p.schema_version}`);
+  if (p.schema_version !== 1 && p.schema_version !== 2)
+    throw new Error(`unsupported schema_version ${p.schema_version}`);
   return p;
 }

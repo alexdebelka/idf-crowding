@@ -1,0 +1,391 @@
+/* Station screens: "now" (Signal / Nuit) and chosen date (Papier). Phone first;
+   tablet >= 700 px, computer >= 1180 px (same breakpoints as globals.css). */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+}
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: var(--pad-top) var(--pad-x) 0;
+}
+.mode-date {
+  padding-bottom: 32px;
+}
+
+/* Header: the method link sits in the header from the tablet up. */
+:global(.hdr-link).notPhone {
+  display: none;
+}
+
+.badgesRow {
+  min-height: 26px;
+}
+.pillRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ---- Date pill and the way back to today ---- */
+.pillWrap {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.datePill {
+  padding: 0 14px 0 18px;
+  gap: 6px;
+}
+.dateInput {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+.todayButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 16px 0 12px;
+  border: 1.5px solid var(--ink);
+  border-radius: 22px;
+  background: transparent;
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex: none;
+}
+
+/* ---- Text ---- */
+.headBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 8px;
+}
+.headline {
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 0.96;
+  overflow-wrap: break-word;
+}
+.headlineShort {
+  font-size: 92px;
+  line-height: 0.95;
+}
+.headlineLong {
+  font-size: 66px;
+}
+.mode-date .headline {
+  font-size: 54px;
+  line-height: 0.98;
+}
+.summary {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.4;
+  max-width: 310px;
+  text-wrap: pretty;
+}
+.dateLine {
+  font-size: 16px;
+  font-weight: 700;
+}
+.comparison {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.facts {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.legendBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: -8px;
+}
+.nowNote {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--label);
+}
+.nowNote a {
+  white-space: nowrap;
+}
+.footer {
+  margin-top: auto;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ardoise);
+}
+.emptyNote {
+  font-size: 18px;
+  font-weight: 600;
+}
+.dateLineRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+/* ---- Charts ---- */
+.dayChart :global(.chart) {
+  --chart-h: 180px;
+}
+.stage {
+  position: relative;
+}
+.chartBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ---- People and rabbit (decorative) ---- */
+.band {
+  position: relative;
+  flex: none;
+  margin-inline: calc(-1 * var(--pad-x));
+  pointer-events: none;
+}
+.bandBottom {
+  flex: 1 0 auto;
+}
+.bandTop {
+  overflow: hidden;
+}
+.bandWrap {
+  display: flex;
+  flex-direction: column;
+}
+.bandBehind {
+  z-index: -1;
+}
+.people {
+  position: absolute;
+  left: 0;
+  display: block;
+  max-width: none;
+}
+.peopleBottom {
+  bottom: 0;
+}
+.peopleTop {
+  top: 0;
+}
+.backLayer {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  left: calc(-1 * var(--pad-x));
+  right: calc(-1 * var(--pad-x));
+  pointer-events: none;
+}
+.rabbitFigure {
+  position: absolute;
+  display: block;
+  color: var(--nuit);
+}
+.rabbitShadow {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--nuit);
+  filter: blur(7px);
+  opacity: 0.45;
+}
+@media (prefers-reduced-transparency: reduce) {
+  .people g {
+    filter: none !important;
+  }
+  .rabbitShadow {
+    display: none;
+  }
+}
+
+/* ---- Tablet ---- */
+@media (min-width: 700px) {
+  :global(.hdr-link).notPhone {
+    display: flex;
+    font-size: 15px;
+  }
+  .page {
+    gap: 0;
+  }
+  .datePill {
+    font-size: 15px;
+  }
+  .badgesRow {
+    margin-top: 36px;
+  }
+  .headBlock {
+    margin-top: 22px;
+    gap: 22px;
+    padding-top: 0;
+  }
+  .headlineShort {
+    font-size: 150px;
+    letter-spacing: -0.045em;
+  }
+  .headlineLong {
+    font-size: 108px;
+    letter-spacing: -0.045em;
+    line-height: 0.95;
+  }
+  .mode-date .headline {
+    font-size: 96px;
+    letter-spacing: -0.045em;
+    line-height: 0.96;
+  }
+  .summary {
+    font-size: 22px;
+    max-width: 460px;
+  }
+  .mode-date .summary {
+    max-width: none;
+    padding-top: 4px;
+  }
+  .dateLine {
+    font-size: 18px;
+  }
+  .chartBlock {
+    margin-top: 44px;
+  }
+  .mode-date .badgesRow {
+    margin-top: 56px;
+  }
+  .mode-date .headBlock {
+    gap: 20px;
+    margin-top: 28px;
+  }
+  .mode-date .chartBlock {
+    margin-top: 64px;
+    gap: 22px;
+  }
+  .dayChart :global(.chart) {
+    --chart-h: 310px;
+  }
+  .dayChart :global(.bar-label) {
+    font-size: 13px;
+  }
+  .nowNote {
+    font-size: 14px;
+  }
+  .footer {
+    padding-top: 32px;
+    font-size: 14px;
+    max-width: 560px;
+  }
+  .mode-date {
+    padding-bottom: 48px;
+  }
+}
+
+/* ---- Computer ---- */
+@media (min-width: 1180px) {
+  .badgesRow {
+    margin-top: 28px;
+  }
+  .headBlock {
+    margin-top: 18px;
+  }
+  .headlineShort,
+  .headlineLong {
+    font-size: 124px;
+    white-space: nowrap;
+  }
+  .mode-date .headline {
+    font-size: 88px;
+    line-height: 0.95;
+  }
+  .mode-date .badgesRow {
+    margin-top: 32px;
+  }
+  .mode-date .headBlock {
+    margin-top: 20px;
+  }
+  .summaryBlock {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-top: 18px;
+  }
+  .summary,
+  .mode-date .summary {
+    font-size: 54px;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    max-width: 1150px;
+    padding-top: 0;
+  }
+  .nowNote {
+    font-size: 15px;
+  }
+  .dateRow {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px 24px;
+    margin-top: 16px;
+  }
+  .mode-date .dateRow {
+    margin-top: 28px;
+  }
+  .dateLine {
+    font-size: 19px;
+  }
+  .comparison {
+    font-size: 21px;
+  }
+  .stage {
+    margin-top: 16px;
+  }
+  .mode-date .dayChart {
+    margin-top: 20px;
+  }
+  .dayChart :global(.chart) {
+    --chart-h: 266px;
+  }
+  .dayChart :global(.bar-label) {
+    font-size: 15px;
+  }
+  .mode-date {
+    padding-bottom: 44px;
+  }
+}
+
+/* Slot that takes the height left under the content (phone, tablet). */
+.bandSlot {
+  display: flex;
+  flex-direction: column;
+  flex: 1 0 auto;
+}
+.headRow {
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+.headRow .nowNote {
+  max-width: 470px;
+  padding-bottom: 14px;
+  text-align: right;
+}

@@ -1,13 +1,8 @@
-import { Hero } from "@/components/Hero";
-import { Search } from "@/components/Search";
+import { HomeScreen } from "@/components/home/HomeScreen";
 import { getIndex } from "@/lib/data";
+import { bandRules } from "@/lib/state";
 
 export default function Home() {
   const index = getIndex();
-  return (
-    <>
-      <Hero count={index.places.length} />
-      <Search places={index.places} />
-    </>
-  );
+  return <HomeScreen places={index.places} bands={bandRules(index)} />;
 }

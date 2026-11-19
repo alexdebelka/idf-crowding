@@ -66,9 +66,16 @@ export interface Forecast {
   dates: ForecastDate[];
 }
 
+/** Backtest error of the daily total for one Place (optional field of place.v2). */
+export interface PlaceAccuracy {
+  wape_pct: number;
+  n_days: number;
+}
+
 export interface PlaceFile {
   schema_version: 1 | 2;
   forecast?: Forecast; // schema_version 2
+  accuracy?: PlaceAccuracy | null; // schema_version 2, optional
   generated_at: string;
   data_period: Period;
   profile_periods?: string[];

@@ -1,0 +1,136 @@
+/* Method page (/a-propos/), Papier ground, from the phone "Method" artboard. Tablet and
+   computer keep the single column, centred, with a readable line length. */
+.screen {
+  padding-bottom: 40px;
+}
+.top {
+  padding: var(--pad-top) var(--pad-x) 0;
+}
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 36px var(--pad-x) 0;
+}
+@media (min-width: 700px) {
+  .column {
+    box-sizing: content-box;
+    padding-top: 48px;
+    gap: 44px;
+  }
+}
+.intro {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.h1 {
+  font-size: 50px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 0.98;
+}
+@media (min-width: 700px) {
+  .h1 {
+    font-size: 64px;
+  }
+}
+.lead {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 16px;
+  line-height: 1.55;
+}
+.h2 {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+.bands {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+}
+.bandRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 46px;
+  padding: 0 16px;
+  border-radius: 23px;
+  background: var(--signal);
+  color: var(--nuit);
+  border: 1.5px solid var(--nuit);
+}
+.bandNight {
+  background: var(--nuit);
+  color: var(--papier);
+}
+.bandName {
+  font-size: 16px;
+  font-weight: 800;
+}
+.bandRange {
+  font-size: 14px;
+  font-weight: 600;
+}
+.tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 2px;
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 18px 20px;
+  border-radius: 22px;
+  background: var(--white);
+  box-shadow:
+    0 16px 28px -16px rgba(14, 17, 22, 0.4),
+    0 2px 6px rgba(14, 17, 22, 0.08);
+}
+.tileValue {
+  font-size: clamp(26px, 7.5vw, 34px);
+  white-space: nowrap;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+.tileLabel {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.spread {
+  font-weight: 600;
+}
+.note {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ardoise);
+}
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 20px;
+  border-top: 1.5px solid var(--nuit);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.muted {
+  color: var(--ardoise);
+}

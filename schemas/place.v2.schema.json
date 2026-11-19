@@ -68,6 +68,9 @@
     },
     "forecast": {
       "$ref": "#/$defs/forecast"
+    },
+    "accuracy": {
+      "$ref": "#/$defs/accuracy"
     }
   },
   "$defs": {
@@ -415,6 +418,30 @@
               "school_holidays"
             ]
           }
+        }
+      }
+    },
+    "accuracy": {
+      "description": "Backtest error of the daily total for this Place (publication-lag backtest, see docs/data-quality.md, 'Per-station accuracy'). Null when the Place has too few scored days or more than one Counting point.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "wape_pct",
+        "n_days"
+      ],
+      "properties": {
+        "wape_pct": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Weighted absolute percentage error of the daily total, in percent."
+        },
+        "n_days": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Scored station-days behind the figure."
         }
       }
     }

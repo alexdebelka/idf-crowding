@@ -254,3 +254,52 @@ Place file is written as schema version 2 (`schemas/place.v2.schema.json`): ever
 - **Size**: hours are stored as 24 integer scores per date (operating-day order). First run
   (built 2026-11-19): 538 Places × 84 dates (2026-11-19 → 2027-02-10), 22–25 KB per file
   (v1: ≤ 9 KB).
+
+## Per-station accuracy (`idf-score build` → place.v2 `accuracy`, `app/public/data/accuracy.json`)
+Code: `score/accuracy.py`; contract: `schemas/accuracy.v1.schema.json` and `$defs.accuracy` in
+`schemas/place.v2.schema.json`. Without the backtest log the build still runs: place files get
+no `accuracy` field and `accuracy.json` is not written (a stale one is removed).
+- **Source**: the production-like forecast log, backtest variant `lag120_prod` (data cutoff =
+  origin − 120 days, production weather), `deep/predictions.parquet`: one row per origin ×
+  Counting point × date, scored rows only (same clean rows as the LightGBM backtest, stations
+  with a TFT forecast). Model column `ens_lgbm_tft_seedavg` = mean(LightGBM, mean of the 3 TFT
+  seeds' medians). This log predates the growth extrapolation and the special-day rule, so it
+  measures the ensemble without them.
+- **Error**: WAPE of the daily total = Σ|y − forecast| / Σy over every scored row of the Place.
+  Origins are monthly with a 60-day horizon, so most dates are forecast by two origins; both
+  rows count, as in the backtest report.
+- **Scored days** = distinct dates with at least one scored row (not rows). **Fewer than 180
+  scored days → `accuracy: null`** (owner rule). First run: 12 origins (2025-06-01 →
+  2026-05-01), dates 2025-06-01 → 2026-06-29, at most 391 scored days per station.
+- **Places with several Counting points**: y and forecast are summed per origin × date, only
+  where every member has a scored row; WAPE and scored days are taken on those sums (none exist
+  today).
+- **No cap, no outlier removal.** Very large errors come from small stations, where a forecast
+  that is off by a few hundred entries a day is a large share of the total. Worst case in the
+  log: Champlan (T12 tram-train, ZdC 486959, ~55 entries a day, data ending 2025-12-13),
+  WAPE 15.6 (1 560 %): LightGBM forecast 470 to 4 700 entries a day on average depending on the
+  origin (TFT 29 to 61), and the ensemble keeps half of that error. It is outside the app's scope (no metro / RER), so it has
+  no Place file, but it stays in the summary tiles, which cover every scored Counting point.
+  Among the app's Places the largest errors are Magenta (45 %) and Haussmann Saint-Lazare
+  (36 %), whose 2026 Q1 level jump is still being checked against the source.
+- Places without a figure on the first run: Saint-Denis – Pleyel (179 scored days) and
+  Villejuif – Gustave Roussy (no TFT forecast: under 365 clean days of history, so not in the
+  ensemble log).
+- **Summary (`accuracy.json`)**: the log (variant, lag, weather, model, origins, scored
+  period, days since the last data day), the minimum-days rule, the number of Places with a
+  figure and the median and 9th decile of their WAPE, and the tiles:
+  - `station_wape_pct`: WAPE over every scored row of the log (all scored Counting points);
+  - `network_wape_pct`: WAPE of the daily network total (sum of scored stations per origin ×
+    date);
+  - `band.coverage`: share of scored rows inside the calibrated 80 % ensemble band
+    (`deep/ensemble_bands.parquet`, `ens_conf_lo` / `ens_conf_hi`);
+  - `special_days`: leave-one-year-out check of the special-day rule ("Special days" above),
+    reproduced from the variant's LightGBM log (`origins/*/predictions.parquet`, warm-up +
+    scored, growth-corrected as in production): factors from outcomes dated before 1 July of
+    the latest Christmas season in the log, applied to that season's 24, 25, 31 December and
+    1 January forecasts (clean rows); station-level WAPE of LightGBM × factor.
+  A tile whose files are missing is left out; the app then hides it.
+- **First run** (built 2026-11-19): 536 of 538 Places have a figure; median 8.4 %, 9th decile
+  17.0 %. Tiles: 10.1 % per station-day, 5.5 % on the network total, 0.806 inside the 80 %
+  band, 13.3 % on the special days of season 2025 (4 972 rows). These measure the daily total;
+  the hourly split (typical profile of the day type) is not backtested.

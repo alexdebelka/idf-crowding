@@ -1,5 +1,6 @@
 """Write the app's JSON contract: index.json (index.v1) + places/<id>.json (place.v1, or
-place.v2 when a production forecast exists: v1 fields + `forecast`)."""
+place.v2 when a production forecast exists: v1 fields + `forecast`, and `accuracy` when the
+backtest log exists) + accuracy.json (accuracy.v1, score/accuracy.py)."""
 
 from __future__ import annotations
 
@@ -52,8 +53,11 @@ def place_records(
     profile_periods: list[str],
     generated_at: datetime,
     forecast: dict[str, Any] | None = None,
+    accuracy: dict[str, dict[str, Any] | None] | None = None,
 ) -> list[dict[str, Any]]:
-    """`forecast` = {issue_date, data_end, dates: {place_id: [...]}} (score/dated.py)."""
+    """`forecast` = {issue_date, data_end, dates: {place_id: [...]}} (score/dated.py);
+    `accuracy` = {place_id: {wape_pct, n_days} or None} (score/accuracy.py), written into
+    place.v2 files only (place.v1 has no such field)."""
     lv = {(r["place_id"], r["day_type"]): r for r in levels.iter_rows(named=True)}
     ref = dict(zip(refs["place_id"], refs["reference_level"], strict=True))
     out = []
@@ -80,6 +84,8 @@ def place_records(
                 "data_end": forecast["data_end"],
                 "dates": forecast["dates"].get(pid, []),
             }
+            if accuracy is not None:
+                rec["accuracy"] = accuracy.get(pid)
         out.append(rec)
     return out
 
@@ -114,8 +120,14 @@ def _dump(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
 
 
-def write(out_dir: Path, index: dict[str, Any], places: list[dict[str, Any]]) -> list[Path]:
-    """Write files; remove stale places/*.json (warns if the filesystem refuses)."""
+def write(
+    out_dir: Path,
+    index: dict[str, Any],
+    places: list[dict[str, Any]],
+    accuracy: dict[str, Any] | None = None,
+) -> list[Path]:
+    """Write files; remove stale places/*.json and a stale accuracy.json (warns if the
+    filesystem refuses)."""
     pdir = out_dir / "places"
     pdir.mkdir(parents=True, exist_ok=True)
     written = []
@@ -124,11 +136,18 @@ def write(out_dir: Path, index: dict[str, Any], places: list[dict[str, Any]]) ->
         path.write_text(_dump(p), encoding="utf-8")
         written.append(path)
     (out_dir / "index.json").write_text(_dump(index), encoding="utf-8")
+    extra = []
+    acc = out_dir / "accuracy.json"
+    if accuracy is not None:
+        acc.write_text(_dump(accuracy), encoding="utf-8")
+        extra.append(acc)
     keep = {p.name for p in written}
-    for stale in pdir.glob("*.json"):
-        if stale.name not in keep:
-            try:
-                stale.unlink()
-            except OSError as e:
-                warnings.warn(f"could not remove stale {stale.name}: {e}", stacklevel=2)
-    return [out_dir / "index.json", *written]
+    stale = [p for p in pdir.glob("*.json") if p.name not in keep]
+    if accuracy is None and acc.exists():
+        stale.append(acc)
+    for path in stale:
+        try:
+            path.unlink()
+        except OSError as e:
+            warnings.warn(f"could not remove stale {path.name}: {e}", stacklevel=2)
+    return [out_dir / "index.json", *extra, *written]

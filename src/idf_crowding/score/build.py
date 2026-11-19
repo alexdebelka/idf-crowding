@@ -6,7 +6,9 @@ Reads data/processed (features_daily, station_profiles, stations) and the stop r
 in data/raw/idfm/reference (arrets-lignes, referentiel-des-lignes, zones-d-arrets, arrets).
 Writes data/processed/typical_week.parquet and <app_data_dir>/{index.json,places/*.json}.
 When data/processed/forecast/<cutoff>/forecast.parquet exists for the latest data cutoff,
-place files also carry the date forecasts (place.v2, score/dated.py).
+place files also carry the date forecasts (place.v2, score/dated.py). When the
+production-like backtest log exists, place.v2 files carry each Place's error and
+<app_data_dir>/accuracy.json summarises it for the method page (score/accuracy.py).
 """
 
 from __future__ import annotations
@@ -25,7 +27,7 @@ import polars as pl
 from idf_crowding.config import REPO_ROOT, load_config
 from idf_crowding.features.calendar import load_public_holidays, load_school_holidays
 from idf_crowding.features.stations import last_quarters
-from idf_crowding.score import dated, export
+from idf_crowding.score import accuracy, dated, export
 from idf_crowding.score.places import assign, load_overrides
 from idf_crowding.score.reference import (
     KIND_ORDER,
@@ -173,8 +175,18 @@ def build(
     names.update({o.id: o.name for o in overrides})
     meta = place_meta(members, stations, lines, names)
     forecast = date_forecasts(paths, end, members, hourly, levels, refs, now)
+    acc = accuracy.compute(paths.processed, members, now)
     records = export.place_records(
-        hourly, levels, refs, meta, s, (start, end), periods, now, forecast
+        hourly,
+        levels,
+        refs,
+        meta,
+        s,
+        (start, end),
+        periods,
+        now,
+        forecast,
+        acc[0] if acc else None,
     )
     index = export.index_record(records, s, (start, end), now)
 
@@ -182,7 +194,7 @@ def build(
     hourly.join(levels, on=["place_id", "day_type"]).join(refs, on="place_id").write_parquet(
         paths.processed / "typical_week.parquet"
     )
-    files = export.write(paths.app_data, index, records)
+    files = export.write(paths.app_data, index, records, acc[1] if acc else None)
     low = levels.filter(pl.col("low_confidence")).height
     log(
         f"score: window {start} -> {end}, profiles {','.join(periods)}; "
@@ -198,6 +210,15 @@ def build(
         log(
             f"score: date forecasts (place.v2) for {len(n)} of {len(records)} places, {span}, "
             f"issued {forecast['issue_date']}, data to {forecast['data_end']}"
+        )
+    if acc is None:
+        log("score: no backtest log for per-station accuracy, accuracy.json not written")
+    else:
+        p, t = acc[1]["places"], acc[1]["tiles"]
+        log(
+            f"score: accuracy for {p['n_with_figure']} of {p['n_places']} places "
+            f"(>= {acc[1]['min_days']} scored days): median {p['median_pct']} %, "
+            f"9th decile {p['p90_pct']} %; tiles {t}"
         )
     return records
 

@@ -38,7 +38,7 @@ SCHEMAS = Path(__file__).resolve().parents[1] / "schemas"
 
 
 def validator(name: str, version: int = 1) -> Draft202012Validator:
-    files = ["place.v1", "index.v1", "place.v2"]
+    files = ["place.v1", "index.v1", "place.v2", "accuracy.v1"]
     res = {
         f"{n}.schema.json": Resource.from_contents(
             json.loads((SCHEMAS / f"{n}.schema.json").read_text())
@@ -494,3 +494,69 @@ def test_schema_v2_rejects_short_scores_and_unknown_reason(tmp_path):
     place["forecast"]["dates"][0]["scores"].append(0)
     place["forecast"]["dates"][0]["reasons"] = ["rain"]
     assert not v.is_valid(place)
+
+
+# --- Per-station accuracy (docs/data-quality.md "Per-station accuracy") ---
+
+
+def write_backtest_log(paths: Paths, n_days: int = 200) -> None:
+    """lag120_prod deep log: 71264 scored on n_days dates (10 % error), 60001 too."""
+    o = date(2025, 6, 1)
+    rows = [
+        (o, sid, o + timedelta(i), y, y * 0.9, True)
+        for i in range(n_days)
+        for sid, y in [(71264, 1000.0), (60001, 50.0)]
+    ]
+    df = pl.DataFrame(
+        rows,
+        schema=["origin", "station_id", "date", "y", "ens_lgbm_tft_seedavg", "scored"],
+        orient="row",
+    )
+    d = paths.processed / "backtest/variants/lag120_prod/deep"
+    d.mkdir(parents=True)
+    df.write_parquet(d / "predictions.parquet")
+
+
+def test_build_writes_place_accuracy_and_summary(tmp_path):
+    paths = write_fixture(tmp_path)
+    write_forecast(paths)
+    write_backtest_log(paths)
+    build(paths, S, log=lambda _: None, now=datetime(2026, 11, 20, 8, tzinfo=UTC))
+    place = json.loads((paths.app_data / "places/71264.json").read_text())
+    validator("place", 2).validate(place)
+    assert place["accuracy"] == {"wape_pct": 10.0, "n_days": 200}
+    summary = json.loads((paths.app_data / "accuracy.json").read_text())
+    validator("accuracy").validate(summary)
+    # spread over the app's Places only (60001 is Transilien-only, out of scope)
+    assert summary["places"]["n_places"] == 1 and summary["places"]["median_pct"] == 10.0
+
+
+def test_build_place_accuracy_null_below_min_days(tmp_path):
+    paths = write_fixture(tmp_path)
+    write_forecast(paths)
+    write_backtest_log(paths, n_days=179)
+    build(paths, S, log=lambda _: None, now=datetime(2026, 11, 20, 8, tzinfo=UTC))
+    place = json.loads((paths.app_data / "places/71264.json").read_text())
+    assert "accuracy" in place and place["accuracy"] is None
+    validator("place", 2).validate(place)
+
+
+def test_build_without_backtest_log_has_no_accuracy(tmp_path):
+    paths = write_fixture(tmp_path)
+    write_forecast(paths)
+    paths.app_data.mkdir(parents=True)
+    (paths.app_data / "accuracy.json").write_text("{}")  # stale file from an earlier build
+    build(paths, S, log=lambda _: None, now=datetime(2026, 11, 20, 8, tzinfo=UTC))
+    place = json.loads((paths.app_data / "places/71264.json").read_text())
+    assert place["schema_version"] == 2 and "accuracy" not in place
+    assert not (paths.app_data / "accuracy.json").exists()
+
+
+def test_build_v1_files_never_carry_accuracy(tmp_path):
+    paths = write_fixture(tmp_path)
+    write_backtest_log(paths)
+    build(paths, S, log=lambda _: None, now=datetime(2026, 11, 20, tzinfo=UTC))
+    place = json.loads((paths.app_data / "places/71264.json").read_text())
+    assert place["schema_version"] == 1 and "accuracy" not in place
+    validator("place").validate(place)
+    assert (paths.app_data / "accuracy.json").is_file()

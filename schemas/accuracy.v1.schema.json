@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/idf-crowding/schemas/accuracy.v1.schema.json",
+  "title": "Forecast accuracy summary for the method page (schema_version 1)",
+  "description": "app/public/data/accuracy.json, written by `idf-score build` when the production-like backtest log exists (score/accuracy.py; docs/data-quality.md, 'Per-station accuracy'). Every figure measures the daily total, not the hourly split. A missing tile means its source files were missing.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "generated_at",
+    "log",
+    "min_days",
+    "day_definition",
+    "places",
+    "tiles"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "log": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "variant",
+        "lag_days",
+        "weather",
+        "model",
+        "n_origins",
+        "origins",
+        "period"
+      ],
+      "properties": {
+        "variant": {
+          "type": "string",
+          "description": "Backtest variant folder, e.g. lag120_prod"
+        },
+        "lag_days": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Data cutoff = origin - lag_days"
+        },
+        "weather": {
+          "enum": [
+            "observed",
+            "production"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "description": "Forecast column of the log"
+        },
+        "model_label": {
+          "type": "string"
+        },
+        "n_origins": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Scored forecast origins"
+        },
+        "origins": {
+          "$ref": "#/$defs/span"
+        },
+        "period": {
+          "$ref": "#/$defs/period",
+          "description": "First and last scored date"
+        },
+        "days_since_data": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "min",
+            "max"
+          ],
+          "properties": {
+            "min": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "description": "Days between the last data day and the forecast dates scored"
+        }
+      }
+    },
+    "min_days": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Fewer scored days -> no per-Place figure"
+    },
+    "day_definition": {
+      "type": "string"
+    },
+    "places": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "n_places",
+        "n_with_figure",
+        "median_pct",
+        "p90_pct"
+      ],
+      "properties": {
+        "n_places": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Places in the app"
+        },
+        "n_with_figure": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "median_pct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "Median of the per-Place WAPE, percent"
+        },
+        "p90_pct": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "9th decile of the per-Place WAPE, percent"
+        }
+      }
+    },
+    "tiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "station_wape_pct": {
+          "type": "number",
+          "minimum": 0,
+          "description": "WAPE of the daily total over every scored station-day, percent"
+        },
+        "network_wape_pct": {
+          "type": "number",
+          "minimum": 0,
+          "description": "WAPE of the daily network total, percent"
+        },
+        "band": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "level",
+            "coverage"
+          ],
+          "properties": {
+            "level": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1
+            },
+            "coverage": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Share of scored station-days inside the band"
+            }
+          }
+        },
+        "special_days": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "wape_pct",
+            "season",
+            "n_rows"
+          ],
+          "properties": {
+            "wape_pct": {
+              "type": "number",
+              "minimum": 0
+            },
+            "season": {
+              "type": "integer",
+              "description": "Year of the December checked (1 January of the next year included)"
+            },
+            "n_rows": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "method": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "span": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "first",
+        "last"
+      ],
+      "properties": {
+        "first": {
+          "type": "string",
+          "format": "date"
+        },
+        "last": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    },
+    "period": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ],
+      "properties": {
+        "start": {
+          "type": "string",
+          "format": "date"
+        },
+        "end": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    }
+  }
+}

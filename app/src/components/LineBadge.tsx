@@ -1,3 +1,4 @@
+import { uniqueLines } from "@/lib/format";
 import type { Line } from "@/lib/types";
 
 // Same label in French and English.
@@ -22,7 +23,7 @@ export function LineBadges({ lines, label }: { lines: Line[]; label: string }) {
   if (!lines.length) return null;
   return (
     <div className="badges" aria-label={label}>
-      {lines.map((l) => (
+      {uniqueLines(lines).map((l) => (
         <LineBadge key={l.id} line={l} />
       ))}
     </div>

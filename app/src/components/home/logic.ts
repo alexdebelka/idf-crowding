@@ -1,7 +1,8 @@
 // Pure logic of the home screen (tested in test/home.test.ts).
 import type { CommonStrings } from "@/lib/i18n/common";
 import { tileFact } from "@/lib/sentences";
-import type { SavedPlace } from "@/lib/saved";
+import { recentOnly } from "@/lib/favourites";
+import { MAX_SAVED, type SavedPlace } from "@/lib/saved";
 import { type BandRule, dayView, nowFacts } from "@/lib/state";
 import { serviceNow } from "@/lib/time";
 import type { Band, IndexPlace, PlaceFile } from "@/lib/types";
@@ -15,6 +16,23 @@ export function largestPlaces(places: IndexPlace[], n = BIG_COUNT): SavedPlace[]
     .sort((a, b) => (b.weekday_entries ?? 0) - (a.weekday_entries ?? 0) || a.name.localeCompare(b.name))
     .slice(0, n)
     .map((p) => ({ id: p.id, name: p.name }));
+}
+
+export type HomeSection = { kind: "favourites" | "recent" | "big"; stations: SavedPlace[] };
+
+/** Sections of the home: favourites, then recent stations that are not favourites; the largest
+ *  stations only when the device has neither. */
+export function homeSections(
+  favourites: SavedPlace[],
+  recent: SavedPlace[],
+  big: SavedPlace[],
+): HomeSection[] {
+  const out: HomeSection[] = [];
+  if (favourites.length) out.push({ kind: "favourites", stations: favourites });
+  const rest = recentOnly(recent, favourites, MAX_SAVED);
+  if (rest.length) out.push({ kind: "recent", stations: rest });
+  if (!out.length && big.length) out.push({ kind: "big", stations: big });
+  return out;
 }
 
 export interface TileState {

@@ -131,3 +131,15 @@ describe("dates in words", () => {
     expect(formatDate("2025-07-01", "en")).toBe("1 July 2025");
   });
 });
+
+describe("launch intro", () => {
+  it("plays the end of the scene in about two and a half seconds", async () => {
+    const { SPLASH_FROM, SPLASH_SPEED, SPLASH_TO, splashTime } = await import("../src/lib/intro");
+    expect(splashTime(0)).toBe(SPLASH_FROM);
+    const length = (SPLASH_TO - SPLASH_FROM) / SPLASH_SPEED;
+    expect(length).toBeGreaterThan(2);
+    expect(length).toBeLessThan(3);
+    expect(splashTime(length - 0.01)).toBeLessThan(SPLASH_TO);
+    expect(splashTime(length + 0.01)).toBeNull();
+  });
+});

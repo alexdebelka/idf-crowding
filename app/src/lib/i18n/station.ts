@@ -13,6 +13,13 @@ const fr = {
   stationPrefix: (name: string) => `${name} : `,
   /** Headline of the chosen date, read with the date ("Jeudi 24 décembre : Plus chargé…"). */
   datePrefix: (day: string) => `${day} : `,
+  /** Favourite star in the header. */
+  favAdd: "Ajouter à vos gares",
+  favRemove: "Retirer de vos gares",
+  favAdded: "Ajoutée à vos gares.",
+  favRemoved: "Retirée de vos gares.",
+  favFull: (n: number) => `Vos gares sont complètes (${n}). Retirez-en une pour en ajouter.`,
+  favError: "Cet appareil n’a pas pu enregistrer la gare.",
 };
 
 export type StationStrings = typeof fr;
@@ -26,6 +33,12 @@ const en: StationStrings = {
   backToTodayLabel: "Back to today",
   stationPrefix: (name: string) => `${name}: `,
   datePrefix: (day: string) => `${day}: `,
+  favAdd: "Add to your stations",
+  favRemove: "Remove from your stations",
+  favAdded: "Added to your stations.",
+  favRemoved: "Removed from your stations.",
+  favFull: (n: number) => `Your stations are full (${n}). Remove one to add another.`,
+  favError: "This device could not save the station.",
 };
 
 export const station = { fr, en };

@@ -9,6 +9,7 @@ import { Header, MethodLink, Screen, StationPicker } from "@/components/shared/H
 import { seedOf } from "@/lib/crowd";
 import { formatDate, formatDayLong, formatDayShort, formatPct } from "@/lib/i18n";
 import { touchSaved } from "@/lib/saved";
+import { FavouriteButton } from "./FavouriteButton";
 import {
   dayComparison,
   dayCalmest,
@@ -177,6 +178,7 @@ export function StationScreen({ data, bands }: { data: PlaceFile; bands: BandRul
       <div className={`${styles.page} ${mode ? styles[`mode-${mode.kind === "now" ? mode.facts.ground : mode.kind}`] : ""}`}>
         <Header>
           <StationPicker name={place.name} />
+          <FavouriteButton place={{ id: place.id, name: place.name }} />
           {layout !== "phone" ? pill : null}
           {layout === "computer" ? back : null}
           <MethodLink className={styles.notPhone} />

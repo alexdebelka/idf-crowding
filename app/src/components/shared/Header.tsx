@@ -21,9 +21,15 @@ export function Header({ children }: { children?: React.ReactNode }) {
   const { t } = useI18n();
   return (
     <header className="hdr">
-      <Link href="/" className="hdr-home" aria-label={t.common.homeLabel}>
+      {/* A plain link: going home is a full page load, which works the same in every browser
+          and in the installed app. */}
+      {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+      <a href="/" className="hdr-home" aria-label={t.common.homeLabel}>
         <RabbitMark />
-      </Link>
+        <span className="hdr-name" aria-hidden="true">
+          {t.common.appName}
+        </span>
+      </a>
       <div className="hdr-right">
         {children}
         <LangSwitch />

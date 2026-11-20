@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/components/I18n";
 import { LineBadge } from "@/components/LineBadge";
+import { uniqueLines } from "@/lib/format";
 import { buildEntries, search } from "@/lib/search";
 import type { IndexPlace } from "@/lib/types";
 import { moveActive, stationHref, wantsSearchFocus } from "./logic";
@@ -125,7 +126,7 @@ export function Search({ places, offline }: { places: IndexPlace[]; offline: boo
                       {p.town ? <span className={s.rowTown}>{p.town}</span> : null}
                     </span>
                     <span className={s.rowBadges} aria-label={t.common.lines}>
-                      {p.lines.map((l) => (
+                      {uniqueLines(p.lines).map((l) => (
                         <LineBadge key={l.id} line={l} />
                       ))}
                     </span>

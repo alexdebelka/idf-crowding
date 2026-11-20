@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { I18nProvider } from "@/components/I18n";
 import { RegisterSW } from "@/components/pwa/RegisterSW";
+import { SPLASH_BOOT, Splash } from "@/components/pwa/Splash";
 
 export const metadata: Metadata = {
   title: { default: "à point : l’affluence des gares de métro et de RER", template: "%s · à point" },
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: SPLASH_BOOT }} />
         <link
           rel="preload"
           href="/fonts/onest-latin-wght-normal.woff2"
@@ -39,6 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         <I18nProvider>{children}</I18nProvider>
         <RegisterSW />
+        <Splash />
       </body>
     </html>
   );

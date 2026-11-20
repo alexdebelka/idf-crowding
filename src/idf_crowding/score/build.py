@@ -1,6 +1,7 @@
 """Build the v0 typical week (Crowding score) and the app's JSON files.
 
     idf-score build
+    idf-score flipper [--days N] [--out PATH]   (file for the Flipper Zero app, score/flipper.py)
 
 Reads data/processed (features_daily, station_profiles, stations) and the stop reference
 in data/raw/idfm/reference (arrets-lignes, referentiel-des-lignes, zones-d-arrets, arrets).
@@ -27,7 +28,7 @@ import polars as pl
 from idf_crowding.config import REPO_ROOT, load_config
 from idf_crowding.features.calendar import load_public_holidays, load_school_holidays
 from idf_crowding.features.stations import last_quarters
-from idf_crowding.score import accuracy, dated, export
+from idf_crowding.score import accuracy, dated, export, flipper
 from idf_crowding.score.places import assign, load_overrides
 from idf_crowding.score.reference import (
     KIND_ORDER,
@@ -225,10 +226,21 @@ def build(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="idf-score", description=__doc__.splitlines()[0])
-    parser.add_argument("command", choices=["build"])
-    parser.parse_args(argv)
+    parser.add_argument("command", choices=["build", "flipper"])
+    parser.add_argument("--days", type=int, default=28, help="flipper: dates in the file")
+    parser.add_argument("--out", type=Path, default=None, help="flipper: output file")
+    args = parser.parse_args(argv)
     config = load_config()
-    build(Paths.from_config(config), ScoreSettings.from_config(config.get("score", {})))
+    paths = Paths.from_config(config)
+    if args.command == "flipper":
+        out = args.out or paths.processed / "flipper" / "a_point.dat"
+        info = flipper.export(paths.app_data, out, args.days)
+        print(
+            f"flipper: {info['places']} places x {info['days']} dates from {info['first']}, "
+            f"{info['bytes'] / 1024:.0f} KB -> {info['path']} (copy to SD: apps_data/a_point/)"
+        )
+        return 0
+    build(paths, ScoreSettings.from_config(config.get("score", {})))
     return 0
 
 

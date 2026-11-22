@@ -6,9 +6,11 @@ import { Header, MethodLink, Screen } from "@/components/shared/Header";
 import { shouldAutoOffer, useInstall } from "@/lib/install";
 import { useOnline } from "@/lib/online";
 import { useFavourites } from "@/lib/favourites";
+import { keychainLink } from "@/lib/keychain";
 import { useSaved } from "@/lib/saved";
 import type { BandRule } from "@/lib/state";
 import type { IndexPlace } from "@/lib/types";
+import { FavouritesEditor } from "./FavouritesEditor";
 import { DownloadIcon, InstallSheet } from "./InstallSheet";
 import { Search } from "./Search";
 import { Tiles } from "./Tiles";
@@ -29,6 +31,20 @@ const OfflineIcon = (
 
 const AUTO_OFFER = false;
 
+/** Plain link to the à point keychain in setup mode (src/lib/keychain.ts). */
+function KeychainLink({ favourites }: { favourites: Parameters<typeof keychainLink>[0] }) {
+  const { t } = useI18n();
+  const href = keychainLink(favourites);
+  if (!href) return null;
+  return (
+    <p className={s.keychainRow}>
+      <a href={href} className={s.keychainLink} rel="nofollow noreferrer">
+        {t.home.keychainSend}
+      </a>
+    </p>
+  );
+}
+
 export function HomeScreen({ places, bands }: { places: IndexPlace[]; bands: BandRule[] }) {
   const { t } = useI18n();
   const online = useOnline();
@@ -36,11 +52,14 @@ export function HomeScreen({ places, bands }: { places: IndexPlace[]; bands: Ban
   const favourites = useFavourites();
   const install = useInstall();
   const [sheet, setSheet] = useState(false);
+  const [editing, setEditing] = useState(false);
   const offered = useRef(false);
 
   const big = useMemo(() => largestPlaces(places), [places]);
   const sections = saved === null || favourites === null ? null : homeSections(favourites, saved, big);
   const heading = { favourites: t.home.savedHeading, recent: t.home.recentHeading, big: t.home.bigHeading };
+  // Edit mode ends by itself when the last favourite is removed (the section goes away).
+  const isEditing = editing && (favourites?.length ?? 0) > 0;
 
   // The sheet opens from the button only. Offering it unasked to a returning visitor is an
   // owner decision (not on the canvas): set AUTO_OFFER to true to turn it on.
@@ -84,11 +103,23 @@ export function HomeScreen({ places, bands }: { places: IndexPlace[]; bands: Ban
 
         {sections?.map((sec, i) => (
           <section key={sec.kind} className={s.saved} aria-labelledby={`home-${sec.kind}`}>
-            <h2 id={`home-${sec.kind}`} className={s.sectionTitle}>
-              {heading[sec.kind]}
-            </h2>
+            <div className={s.sectionHead}>
+              <h2 id={`home-${sec.kind}`} className={s.sectionTitle}>
+                {heading[sec.kind]}
+              </h2>
+              {sec.kind === "favourites" ? (
+                <button type="button" className={s.editToggle} aria-pressed={isEditing} onClick={() => setEditing(!isEditing)}>
+                  {isEditing ? t.home.favDone : t.home.favEdit}
+                </button>
+              ) : null}
+            </div>
             {i === 0 && sec.kind !== "favourites" ? <p className={s.favHint}>{t.home.favHint}</p> : null}
-            <Tiles stations={sec.stations} bands={bands} online={online} />
+            {sec.kind === "favourites" && isEditing ? (
+              <FavouritesEditor stations={sec.stations} />
+            ) : (
+              <Tiles stations={sec.stations} bands={bands} online={online} />
+            )}
+            {sec.kind === "favourites" && !isEditing && favourites ? <KeychainLink favourites={favourites} /> : null}
           </section>
         ))}
 

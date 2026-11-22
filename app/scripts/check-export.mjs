@@ -9,8 +9,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** Pages a visitor may be sent to by a plain link (not requested by the page). */
-export const LINK_HOSTS = ["data.iledefrance-mobilites.fr", "opendatacommons.org"];
+/** Pages a visitor may be sent to by a plain link (not requested by the page). 192.168.4.1 is
+    the à point keychain in setup mode, on its own Wi-Fi network (src/lib/keychain.ts). */
+export const LINK_HOSTS = ["data.iledefrance-mobilites.fr", "opendatacommons.org", "192.168.4.1"];
 
 /** A host that must not appear anywhere, even as text. */
 const BANNED =

@@ -126,7 +126,7 @@ Rolling origin, time splits only. Rules in `src/idf_crowding/models/`.
 | Deep models (option C) | `idf-deep export`: per origin, complete daily grid from each station's first clean day; excluded or absent days get `available_mask` = 0 and an interpolated log1p target (inputs only, never scored); future exogenous = calendar, day type, frozen `short_pass_share`, weather z-scored with pre-origin statistics; static = frozen station type and morning share, log mean entries of the last 365 days. Stations with < 365 clean days or none in the last 28 days are left out (LightGBM only). `idf-deep score` uses exactly the LightGBM scored rows. Lag variants (`--lag N --weather production`): history ends at the cutoff c, future rows c .. origin + 59 (model h = N + 60) with observed calendar and weather on the gap, climatology after day 16; static features and weather z-scores from data before c; the gap rows are never scored. With several seeds that all have the warm-up origins, the ensemble band is calibrated on the seed average |
 | Publication lag (variants) | `--lag N` (`lag_days`): data cutoff c = origin − N days. Everything that the main backtest takes "before the origin" is taken before c instead: training rows, frozen `short_pass_share` and station type / morning share (profile periods ended before c), `naive_4w` (4 weeks before c), `daytype_12m` (365 days before c), busy thresholds, interval calibration rows (earlier origins' forecasts dated in [c − 365, c)). The gap c .. origin − 1 is not forecast; scored dates and exclusion rules are those of the main backtest. `days_since_data` = N + horizon. Results in `backtest/variants/lagN_obs\|prod/`; `idf-backtest summary` compares variants. Lags tried: 75 / 120 / 165 days (IDFM publishes a quarter ~70–76 days after it ends, so the last data day is 75–165 days old at issue time) |
 | Production weather (variants) | `--weather production`: observed weather for days 1–16 after the origin (stands in for a weather forecast; forecast error ignored), then day-of-year climatology = mean of all dates before c within ± 7 calendar days (weather since 2015). Training rows keep observed weather |
-| Busy day | Entries above the station's 90th percentile of clean days of the same day group over the 365 days before the origin (before c with a lag). P(busy) from the conformal residual distribution (grid 5–95 %, linear CDF, tails clamped at 2.5 / 97.5 %). Scores: Brier, reliability bins |
+| Busy day | Entries above the station's 90th percentile of clean days of the same day group over the 365 days before the origin (before c with a lag). P(busy) from the conformal residual distribution (grid 5–95 %, linear CDF, tails clamped at 2.5 / 97.5 %). Scores: Brier, reliability bins. A seasonal threshold and a logistic recalibration were tried on the production-like log and not accepted: see "P(busy day) recalibration" below |
 
 Known limits: profiles and validations are published months after the fact, so a real
 forecast made today has a longer effective horizon than the main backtest (see the lag
@@ -148,7 +148,7 @@ Decision record: `docs/adr/0002-production-forecast-per-release.md`.
 | TFT | `idf-deep export --production`: one origin = the cutoff, h = `days_max`; 3 seeds on a GPU; mean of the seeds' medians |
 | Point | mean(LightGBM, TFT seed mean); LightGBM alone for stations without TFT (fewer than 365 clean days) or without `--deep` (`model` column) |
 | 80 % band | Conformal: residual quantiles of the production-like backtest (variant `lag120_prod`: ensemble log for the ensemble, LightGBM log for LightGBM alone) dated in the 365 days before the cutoff, by day type × station type × horizon bucket (horizon = days since the issue date, buckets capped at 29–60) |
-| Not produced | P(busy day) (not calibrated well enough, see Backtest) |
+| Not produced | P(busy day): not calibrated well enough at the publication lag (see "P(busy day) recalibration") |
 | Growth | LightGBM × year-on-year growth of its weekday class projected from the cutoff (columns `lgbm`, `lgbm_raw`, `growth`); see "Growth extrapolation" below |
 | Special days | Dec 24, Dec 25, Dec 31, Jan 1: LightGBM × a per-station factor (point and band), not the ensemble; columns `special_day`, `adjust` (1 on other dates); raw `lgbm` / `tft` kept. See "Special days" below |
 
@@ -303,3 +303,58 @@ no `accuracy` field and `accuracy.json` is not written (a stale one is removed).
   17.0 %. Tiles: 10.1 % per station-day, 5.5 % on the network total, 0.806 inside the 80 %
   band, 13.3 % on the special days of season 2025 (4 972 rows). These measure the daily total;
   the hourly split (typical profile of the day type) is not backtested.
+
+### P(busy day) recalibration (`models/busy.py`, `idf-busy run` / `make busy`; not accepted)
+**Question.** Can P(busy day) be made reliable enough to publish? Acceptance, on the
+production-like log (variant `lag120_prod`, 12 scored origins, LightGBM growth-corrected as
+in production, ensemble = mean(LightGBM, mean of 3 TFT seeds)): observed busy rate within
+± 3 points of the mean predicted probability in every reliability bin with ≥ 500 rows,
+overall and per season (DJF / MAM / JJA / SON); Brier skill vs "always 10 %" ≥ 0.23
+(LightGBM) / 0.30 (ensemble).
+
+**Thresholds** (`intervals.busy_threshold`, `method`):
+
+| Method | Rule |
+|---|---|
+| `yearly` (backtest default) | Station p90 of clean days of the same day group (working day / Saturday / Sunday-holiday) in [c − 365 d, c) |
+| `seasonal` | Same station and day group, clean days within ± 45 days of the target's day of year, all years before c (from `train_start`); fewer than 20 such days → the yearly p90. Each reference day × g ** ((target − day) / 364), g = the LightGBM growth rate of its weekday class at c (`growth.py`). Within the window, the p90 is taken on value / local level (median of the days within ± 10 days of year), then × the local level at the target's day of year: without it the window's seasonal slope leaks into the threshold (synthetic test: 0–16 % busy per month without, 10–13 % with) |
+
+**Recalibration** (fitted at each origin on earlier origins' forecasts of clean days dated
+in [c − 365 d, c), as the intervals): isotonic on p (`recalibrate_busy`); logistic regression
+on logit(p) + horizon bucket indicators (`recalibrate_busy_logistic`; season and day group
+can be added with `--context`; tried with a first version of the seasonal threshold (no local
+level), it made the largest per-season gap worse: 0.31 → 0.37 LightGBM, 0.30 → 0.46 ensemble).
+
+**Result** (`backtest/variants/lag120_prod/busy/report.md`):
+
+| model | threshold | recalibration | observed rate | mean p | Brier skill | largest gap overall / per season | accepted |
+|---|---|---|---|---|---|---|---|
+| LightGBM | yearly | raw | 0.335 | 0.415 | 0.29 | 0.27 / 0.49 | no |
+| LightGBM | seasonal | isotonic | 0.124 | 0.153 | 0.21 | 0.07 / 0.15 | no |
+| LightGBM | seasonal | logistic | 0.124 | 0.148 | 0.20 | 0.15 / 0.22 | no |
+| ensemble | yearly | raw | 0.333 | 0.379 | 0.35 | 0.20 / 0.52 | no |
+| ensemble | seasonal | isotonic | 0.120 | 0.131 | 0.21 | 0.07 / 0.20 | no |
+| ensemble | seasonal | logistic | 0.120 | 0.128 | 0.21 | 0.08 / 0.19 | no |
+
+Skill is against "always 10 %", so it is not comparable across thresholds (the yearly
+target's base rate of 33 % makes that reference weak).
+
+- The seasonal threshold brings the busy rate from 33 % to 12 % overall, but not to
+  8–12 % in every month (lgbm rows: 3 % in March, 30 % in July, 22 % in August) nor per
+  origin (4 % to 26 %, warm-up origins included).
+- The cause is the level, 4–10 months ahead and across reference years. The threshold
+  compounds the growth factor known at c over the reference years and over the lag; network
+  year-on-year growth of working days was +6–17 % per month in 2025 and +2–12 % in Jan–Jun
+  2026, so the threshold's level is off by several percent when the regime changes, and the
+  exceedance of a p90 is very sensitive to a few percent of level. The conformal residuals
+  of earlier origins carry the previous regime: on 2026 origins (LightGBM roughly unbiased,
+  forecast / actual 0.95–1.07) raw p is 0.11–0.19 and the observed rate 0.04–0.08;
+  per-origin busy rate and network forecast bias are uncorrelated (r = −0.07).
+- Removing each origin's network level bias with its own outcomes (a diagnostic, not a
+  method) still leaves gaps of 0.10–0.33: station-level errors matter as much.
+- More origins (monthly since 2023) were not run: the gaps are systematic (bins of 7 000–300 000
+  rows), not noise.
+
+Decision: P(busy day) stays out of the production forecast and the app. The code is kept to
+re-run when more origins are available (`make busy`; ~5 min).
+

@@ -1,4 +1,4 @@
-.PHONY: setup test lint format check poll status compact backup ingest ingest-plan clean features backtest deep-export deep-export-warmup deep-score score forecast-lgbm forecast-export forecast-combine flipper
+.PHONY: setup test lint format check poll status compact backup ingest ingest-plan clean features backtest deep-export deep-export-warmup deep-score score forecast-lgbm forecast-export forecast-combine flipper busy
 
 setup:
 	uv sync
@@ -67,6 +67,11 @@ deep-export-warmup:
 
 deep-score:
 	uv run idf-deep score
+
+# P(busy day) thresholds x recalibrations on the production-like log (lag 120, production
+# weather; needs that variant's backtest and TFT outputs) -> backtest/variants/lag120_prod/busy/
+busy:
+	uv run idf-busy run
 
 # Step 4c: production forecast, once per IDFM release (docs/adr/0002). After `make ingest clean features`:
 forecast-lgbm:

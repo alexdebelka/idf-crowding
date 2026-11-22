@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { LangSwitch, useI18n } from "@/components/I18n";
+import { LoadingRabbit, useHydrated } from "./LoadingRabbit";
 
 /** The rabbit mark, drawn in the current ink colour (one cached file, used as a mask). */
 export function RabbitMark({ height, className }: { height?: number; className?: string }) {
@@ -88,22 +89,30 @@ export function useThemeColor(ground: keyof typeof GROUND_COLOR) {
   }, [ground]);
 }
 
-/** A full-bleed screen on one of the three grounds, with its decorative light patches. */
+/** A full-bleed screen on one of the three grounds, with its decorative light patches.
+ *  Until the page's code runs, a small loading rabbit stands in the corner: the screen is
+ *  already drawn but its buttons do not answer yet (`loader="none"` when the screen shows its
+ *  own). */
 export function Screen({
   ground,
   className,
+  loader = "corner",
   children,
 }: {
   ground: keyof typeof GROUND_COLOR;
   className?: string;
+  loader?: "corner" | "none";
   children: React.ReactNode;
 }) {
+  const { t } = useI18n();
+  const hydrated = useHydrated();
   useThemeColor(ground);
   return (
     <div className={`screen ground-${ground}${className ? ` ${className}` : ""}`}>
       <span aria-hidden="true" className="patch patch-a" />
       <span aria-hidden="true" className="patch patch-b" />
       {children}
+      {loader === "corner" && !hydrated ? <LoadingRabbit size="small" label={t.common.loading} /> : null}
     </div>
   );
 }

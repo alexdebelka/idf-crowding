@@ -23,7 +23,24 @@
 }
 
 .badgesRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   min-height: 26px;
+}
+.badgesRow :global(.badges) {
+  flex: 1;
+  min-width: 0;
+}
+/* Phone star: the badges take the rest of the row. The 44 px tap target overlaps its
+   neighbours so the row keeps the badge height, the star lines up with the header's right
+   edge, and the badges keep as much width as possible (8 badges fit on one line at 320 px). */
+.badgesRow :global(.fav-btn) {
+  margin: -9px -10px -9px -10px;
+}
+/* A station without line badges: the star still goes to the right. */
+.badgesRow :global(.fav-btn):first-child {
+  margin-left: auto;
 }
 .pillRow {
   display: flex;

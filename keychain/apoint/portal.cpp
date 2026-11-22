@@ -5,7 +5,7 @@
 #include <WiFi.h>
 
 #include "config.h"
-#include "stations_data.h"
+#include "src/stations_data.h"
 #include "store.h"
 
 namespace portal {
@@ -97,7 +97,7 @@ static void handleRoot() {
        "</select><label for=o>Ou son nom</label><input id=o name=o autocomplete=off>"
        "<label for=p>Mot de passe</label><input id=p name=p type=password autocomplete=off>"
        "<button>Enregistrer</button></form>";
-  // Station picker: works on the keychain's own network, without Internet (list in stations_data.h).
+  // Station picker: works on the keychain's own network, without Internet (list in src/stations_data.h).
   String favs;
   {
     String ids[MAX_FAVS];

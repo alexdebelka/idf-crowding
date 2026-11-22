@@ -1,10 +1,10 @@
-// Decoder of the intro frames (intro_data.h, gen/intro_enc.py): one frame at a time, band by
+// Decoder of the intro frames (src/intro_data.h, gen/intro_enc.py): one frame at a time, band by
 // band, into a buffer of `bandRows` screen rows. Portable (tested on a computer).
 #pragma once
 #include <stdint.h>
 
 #include "gfx.h"
-#include "intro_data.h"
+#include "src/intro_data.h"
 
 // Decodes frame f; calls emit(top, rows) each time the band buffer holds `rows` finished rows.
 template <class Emit>

@@ -4,9 +4,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "fonts_data.h"
+#include "src/fonts_data.h"
 #include "logic.h"
-#include "rabbit_data.h"
+#include "src/rabbit_data.h"
 
 // Design tokens (docs/DESIGN_SPEC.md)
 static const Rgb NUIT = rgb(0x0E1116), SIGNAL = rgb(0xD9F84A), PAPIER = rgb(0xF6F7F4);

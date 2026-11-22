@@ -114,6 +114,17 @@ def test_summary_tiles_and_schema(tmp_path):
     assert rec["min_days"] == 180
 
 
+def test_tiles_leave_out_stations_outside_the_app(tmp_path):
+    rows = [(O1, 1, d, 1000, 900, True) for d in days(200)]
+    rows += [(O1, 9, d, 50, 800, True) for d in days(200)]  # e.g. a T12 stop: no Place
+    write_log(tmp_path, log_rows(rows))
+    places, rec = acc.compute(tmp_path, assign([1], []), NOW)
+    assert set(places) == {"1"}
+    assert rec["tiles"]["station_wape_pct"] == pytest.approx(10.0)
+    assert rec["tiles"]["network_wape_pct"] == pytest.approx(10.0)
+    assert rec["log"]["n_origins"] == 1
+
+
 def test_summary_without_bands_leaves_the_tile_out(tmp_path):
     write_log(tmp_path, log_rows([(O1, 1, d, 10, 9, True) for d in days(3)]))
     _, rec = acc.compute(tmp_path, assign([1], []), NOW)

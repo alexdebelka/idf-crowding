@@ -12,7 +12,9 @@ Rules (public: docs/data-quality.md "Per-station accuracy"):
 4. A Place with several Counting points: y and forecast are summed per origin x date, only
    where every member has a scored row; WAPE and days are taken on those sums.
 5. No cap and no outlier removal: a large error is published as it is.
-6. Summary tiles come from the same log (station level, network total), its calibrated
+6. Summary tiles cover the Counting points of the app's Places only (stations outside the
+   app's scope, such as the T12 tram-train, are left out). They come from the same log
+   (station level, network total), its calibrated
    80 % band (`deep/ensemble_bands.parquet`, ensemble conformal band) and the leave-one-year-out
    check of the special-day rule (LightGBM x factor, models/special_days.py) on the variant's
    LightGBM forecast log (`origins/*/predictions.parquet`, growth-corrected as in
@@ -127,7 +129,9 @@ def band_coverage(vdir: Path, log: pl.DataFrame) -> float | None:
     return round(float(j.select(inside.mean()).item()), 3)
 
 
-def special_day_check(vdir: Path, features: Path) -> dict[str, Any] | None:
+def special_day_check(
+    vdir: Path, features: Path, stations: list[int] | None = None
+) -> dict[str, Any] | None:
     """Leave-one-year-out check of the special-day rule (docs/data-quality.md "Special
     days"): factors from outcomes dated before 1 July of the latest Christmas season in the
     LightGBM log, applied to that season's forecasts; station-level WAPE of LightGBM x f."""
@@ -172,6 +176,10 @@ def special_day_check(vdir: Path, features: Path) -> dict[str, Any] | None:
     if test.height == 0 or f.height == 0:
         return None
     out = sd.apply(test, f, cols=("lgbm",))
+    if stations is not None:
+        out = out.filter(pl.col("station_id").is_in(stations))
+        if out.height == 0:
+            return None
     w = (out["y"] - out["lgbm"]).abs().sum() / out["y"].sum()
     return {
         "wape_pct": _pct(w),
@@ -194,8 +202,10 @@ def summary(
     generated_at: datetime,
     features: Path | None = None,
     min_days: int = MIN_DAYS,
+    stations: list[int] | None = None,
 ) -> dict[str, Any]:
-    """The accuracy.json record (schemas/accuracy.v1.schema.json)."""
+    """The accuracy.json record (schemas/accuracy.v1.schema.json). Tiles use the rows of
+    `stations` only (default: every station in the log)."""
     meta: dict[str, Any] = {}
     vfile = vdir / "variant.json"
     if vfile.is_file():
@@ -233,6 +243,11 @@ def summary(
         "p90_pct": _quantile(vals, 0.9),
     }
     tiles: dict[str, Any] = {}
+    if stations is not None:
+        log = log.filter(pl.col("station_id").is_in(stations))
+    if log.height == 0:
+        rec["tiles"] = tiles
+        return rec
     tiles["station_wape_pct"] = _pct((log["y"] - log["pred"]).abs().sum() / log["y"].sum())
     net = network_wape(log)
     if net is not None:
@@ -241,7 +256,7 @@ def summary(
     if cov is not None:
         tiles["band"] = {"level": BAND_LEVEL, "coverage": cov}
     if features is not None:
-        sdc = special_day_check(vdir, features)
+        sdc = special_day_check(vdir, features, stations)
         if sdc is not None:
             tiles["special_days"] = sdc
     rec["tiles"] = tiles
@@ -262,5 +277,13 @@ def compute(
         return None
     table = place_table(log, members)
     places = place_accuracy(table, sorted(members["place_id"].unique().to_list()), min_days)
-    rec = summary(vdir, log, places, generated_at, processed / "features_daily.parquet", min_days)
+    rec = summary(
+        vdir,
+        log,
+        places,
+        generated_at,
+        processed / "features_daily.parquet",
+        min_days,
+        stations=sorted(members["station_id"].unique().to_list()),
+    )
     return places, rec

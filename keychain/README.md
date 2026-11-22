@@ -9,7 +9,8 @@ crowding forecast of your favourite stations, as in the app.
 - Data: the public Place files of the site (`/data/places/<id>.json`, `place.v2`), downloaded once a
   night and kept on the device, so the screens work without Wi-Fi.
 - Favourites: sent from the app over the keychain's own Wi-Fi network. Nothing goes through a server.
-- Not yet: real-time arrivals (double press on button 2), planned as the next step.
+- Next departures: double press on button 2 shows the next 4 departures (all lines) of the
+  station, from the site's `/api/next/<id>` (real time, needs the Wi-Fi; refreshed every 30 s).
 
 ## Controls
 
@@ -17,10 +18,11 @@ crowding forecast of your favourite stations, as in the app.
 | --- | --- |
 | Button 1 (BOOT), one press | Next station |
 | Button 2 (KEY), one press | Today / tomorrow |
+| Button 2, two presses | Next departures (real time). Any press goes back. |
 | Hold one button 3 s | Closing animation, then off. Any press turns it back on (with the intro). |
 | Hold both buttons 3 s | Setup mode |
 | No press for 20 s | Sleep. Any press wakes it. |
-| After sleep | Locked: the last screen shows; three presses in a row unlock it. |
+| After sleep | Locked: the last screen shows; three presses in a row unlock it. Left on the departures, it shows them refreshed (or the crowding screen without Wi-Fi). |
 
 ## Setting it up
 
@@ -77,6 +79,7 @@ apoint/            the sketch
   store.*          NVS (Wi-Fi, favourites, last screen) and FFat (/p/<id>.bin)
   net.*            Wi-Fi, NTP, HTTPS download (root CAs in certs.h)
   portal.*         setup mode: access point, captive page, /f?ids=...
+  departures.h     /api/next/<id> answer -> the next 4 rows (portable, like parse.h)
   aptqr.*          QR codes (Nayuki, MIT)
   src/             generated headers (below): fonts_data.h, rabbit_data.h, intro_data.h,
                    stations_data.h. In src/ so the Arduino IDE does not open them as tabs
@@ -99,6 +102,8 @@ python3 gen/intro_enc.py /tmp/intro apoint/src/intro_data.h
 Check the screens on a computer: `ARDUINOJSON=<ArduinoJson>/src gen/host_render.sh`, then
 `gen/host_render station <place.json> 2026-11-19 18 0 0 0 busy.ppm` (date, hour, tomorrow, locked,
 dots).
+Departures: `gen/host_render arrivals <place.json> <answer.json|loading|nowifi> <elapsed s> <locked> <dots> out.ppm`
+(answer = a saved `/api/next/<id>` reply).
 
 ## Notes
 

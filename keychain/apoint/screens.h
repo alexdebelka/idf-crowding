@@ -19,6 +19,19 @@ struct StationView {
 
 void drawStation(Canvas &c, const StationView &v);
 
+// Next departures (Papier, pill "Prochains passages", up to four rows: badge, direction,
+// minutes). `dep` holds the last answer, `elapsed` the seconds since it came.
+struct Departures;
+struct ArrivalsView {
+  const PlaceData *place;    // null: nothing stored for this station yet
+  const char *fallbackName;  // shown when place is null
+  const Departures *dep;
+  int32_t elapsed;
+  bool locked;
+  uint8_t lockDots;
+};
+void drawArrivals(Canvas &c, const ArrivalsView &v);
+
 // Thin bar across the top while a button is held (0-1).
 void drawHoldBar(Canvas &c, float progress, bool onNight);
 

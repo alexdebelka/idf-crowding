@@ -44,3 +44,9 @@ bool scoresFor(const PlaceData &p, int32_t day, uint16_t out[24], bool *forecast
     }
   return false;
 }
+
+const LineInfo *lineById(const PlaceData &p, const char *id) {
+  for (int i = 0; i < p.nids && i < MAX_LINE_IDS; i++)
+    if (!strcmp(p.lineId[i], id) && p.lineIdBadge[i] < p.nlines) return &p.lines[p.lineIdBadge[i]];
+  return nullptr;
+}

@@ -26,9 +26,10 @@
 // way the keychain is held.
 #define SCREEN_ROTATION 1
 
-// Site serving the Place files (place.v2) and, later, /api/next/<id>.
+// Site serving the Place files (place.v2) and the next departures (/api/next/<id>, ADR 0004).
 #define SITE_HOST "quaicalme.com"
 #define PLACE_PATH "/data/places/"
+#define NEXT_PATH "/api/next/"
 
 // Behaviour (README.md, "Controls")
 #define SLEEP_AFTER_MS 20000UL     // no press for this long: deep sleep
@@ -42,10 +43,11 @@
 #define SYNC_MINUTE 30
 #define WIFI_TIMEOUT_MS 12000UL
 
-// Real-time arrivals (double press on button 2) come in the next step; until then a single
-// press on button 2 acts at once instead of waiting for a possible second press.
-#define ARRIVALS_ENABLED 0
+// Next departures: double press on button 2 (a single press then waits this long for a second
+// one). Set ARRIVALS_ENABLED to 0 to make button 2 act at once and drop the screen.
+#define ARRIVALS_ENABLED 1
 #define DOUBLE_PRESS_MS 300UL
+#define ARRIVALS_REFRESH_MS 30000UL  // same as the site's edge cache
 
 // Paris time zone, POSIX form (daylight saving from the last Sunday of March to the last
 // Sunday of October).

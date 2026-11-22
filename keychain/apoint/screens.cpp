@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "src/fonts_data.h"
+#include "departures.h"
 #include "logic.h"
 #include "src/rabbit_data.h"
 
@@ -56,14 +57,16 @@ static float badgeWidth(const LineInfo &l) {
   return tw + 7 > BADGE ? tw + 7 : BADGE;
 }
 
-static void badge(Canvas &c, float x, const LineInfo &l, Rgb border) {
-  float w = badgeWidth(l), y = HEAD_MID - BADGE / 2;
+static void badgeAt(Canvas &c, float x, float mid, const LineInfo &l, Rgb border) {
+  float w = badgeWidth(l), y = mid - BADGE / 2;
   float r = l.kind == KIND_RER || l.kind == KIND_TRAIN ? 5.f : BADGE / 2;
   c.rrect(x, y, w, BADGE, r, l.color);
   c.rrectStroke(x, y, w, BADGE, r, 1, border);
   float tw = Canvas::width(FBADGE, l.name);
-  c.text(FBADGE, x + (w - tw) / 2, midBaseline(FBADGE, HEAD_MID), l.name, l.text);
+  c.text(FBADGE, x + (w - tw) / 2, midBaseline(FBADGE, mid), l.name, l.text);
 }
+
+static void badge(Canvas &c, float x, const LineInfo &l, Rgb border) { badgeAt(c, x, HEAD_MID, l, border); }
 
 static const float NAME_X = 10 + 20 + 6;
 
@@ -326,6 +329,78 @@ void drawStation(Canvas &c, const StationView &v) {
     dayScreen(c, v, day, scores);
   else
     nowScreen(c, v, scores);
+}
+
+// ---- Next departures ----
+
+static const int DEP_TOP = 36, DEP_ROW = 32;
+
+// "3 min", "à quai" / "à l'approche" at 0 (as the app, app/src/lib/i18n/station.ts).
+static void waitText(int32_t s, bool atStop, char *out, size_t n) {
+  int m = s <= 0 ? 0 : (int)(s / 60);
+  if (m == 0)
+    snprintf(out, n, "%s", atStop ? "\xC3\xA0 quai" : "\xC3\xA0 l\xE2\x80\x99" "approche");
+  else
+    snprintf(out, n, "%d\xC2\xA0min", m);
+}
+
+void drawArrivals(Canvas &c, const ArrivalsView &v) {
+  ground(c, G_PAPIER);
+  headerRabbit(c, NUIT);
+  const char *name = v.place ? v.place->name : (v.fallbackName ? v.fallbackName : "");
+  float left = v.locked ? lockPill(c, 310, v.lockDots, NUIT, PAPIER)
+                        : pill(c, 310, "Prochains passages", NUIT, PAPIER);
+  stationName(c, name, left, NUIT);
+
+  const char *l1 = nullptr, *l2 = nullptr;
+  DepRow rows[DEP_SHOW];
+  int n = 0;
+  switch (v.dep ? v.dep->status : (uint8_t)DEP_LOADING) {
+    case DEP_LOADING:
+      l1 = "Chargement\xE2\x80\xA6";
+      break;
+    case DEP_NO_WIFI:
+      l1 = "Pas de";
+      l2 = "connexion.";
+      break;
+    case DEP_OK:
+      n = depVisible(*v.dep, v.elapsed, v.place, rows);
+      if (!n) {
+        l1 = "Aucun passage";
+        l2 = "dans l\xE2\x80\x99heure.";
+      }
+      break;
+    default:
+      l1 = "Service";
+      l2 = "indisponible.";
+  }
+  if (l1) {
+    c.text(FH28, 10, Canvas::baselineFor(FH28, 31, 27), l1, NUIT);
+    if (l2) c.text(FH28, 10, Canvas::baselineFor(FH28, 58, 27), l2, NUIT);
+    return;
+  }
+  const Rgb mute = rgb(0x4A5466), rule = rgb(0xD5DAE1);
+  const LineInfo unknown{"?", KIND_TRAIN, rgb(0x8E97A6), rgb(0xFFFFFF)};
+  for (int i = 0; i < n; i++) {
+    const DepRow &r = rows[i];
+    float top = DEP_TOP + i * DEP_ROW, mid = top + DEP_ROW / 2.f;
+    if (i) c.rect(10, (int)top, 300, 1, rule);
+    const LineInfo *li = v.place ? lineById(*v.place, r.line) : nullptr;
+    const LineInfo &l = li ? *li : unknown;
+    badgeAt(c, 10, mid, l, NUIT);
+    float x = 10 + badgeWidth(l) + 8;
+    // Times on the right, as in the app: the first one bold, then the next one smaller and muted.
+    char t1[24], t2[24] = "";
+    waitText(r.in[0], r.atStop, t1, sizeof t1);
+    if (r.ntimes > 1) waitText(r.in[1], false, t2, sizeof t2);
+    float w1 = Canvas::width(FNAME, t1), w2 = t2[0] ? Canvas::width(FSMALL, t2) + 7 : 0;
+    float right = 310 - w2 - w1;
+    c.text(FNAME, right, midBaseline(FNAME, mid), t1, NUIT);
+    if (t2[0]) c.text(FSMALL, 310 - w2 + 7, midBaseline(FSMALL, mid), t2, mute);
+    char dest[80];
+    fitText(FNAME, r.dest, right - 10 - x, dest, sizeof dest);
+    c.text(FNAME, x, midBaseline(FNAME, mid), dest, NUIT);
+  }
 }
 
 void drawHoldBar(Canvas &c, float p, bool onNight) {

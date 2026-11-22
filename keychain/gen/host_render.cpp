@@ -4,6 +4,7 @@
 //   host_render close <t seconds> <out.ppm>
 //   host_render setup <out.ppm>
 //   host_render message <out.ppm>
+//   host_render arrivals <place.json|-> <answer.json|loading|nowifi> <elapsed s> <locked 0|1> <dots> <out.ppm>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,6 +12,7 @@
 #include <fstream>
 
 #include "../apoint/aptqr.h"
+#include "../apoint/departures.h"
 #include "../apoint/gfx.h"
 #include "../apoint/model.h"
 #include "../apoint/parse.h"
@@ -67,6 +69,31 @@ int main(int argc, char **argv) {
                 "Wi-Fi : Freebox-2A41 (ok)", 5, ok ? aptqr_getSize(qr) : 0, qrModule};
     drawSetup(c, v);
     save(c, argv[2]);
+  } else if (argc >= 8 && !strcmp(argv[1], "arrivals")) {
+    static PlaceData p;
+    bool havePlace = strcmp(argv[2], "-") != 0;
+    if (havePlace) {
+      std::ifstream in(argv[2]);
+      const char *err = parsePlace(in, p);
+      if (err[0]) {
+        fprintf(stderr, "parse place: %s\n", err);
+        return 1;
+      }
+    }
+    static Departures d;
+    memset(&d, 0, sizeof d);
+    if (!strcmp(argv[3], "loading")) {
+      d.status = DEP_LOADING;
+    } else if (!strcmp(argv[3], "nowifi")) {
+      d.status = DEP_NO_WIFI;
+    } else {
+      std::ifstream in(argv[3]);
+      parseDepartures(in, d);
+    }
+    ArrivalsView v{havePlace ? &p : nullptr, "71264", &d, atoi(argv[4]), atoi(argv[5]) != 0, (uint8_t)atoi(argv[6])};
+    drawArrivals(c, v);
+    save(c, argv[7]);
+    fprintf(stderr, "status %d, %d rows kept, %d ids\n", d.status, d.n, havePlace ? p.nids : 0);
   } else if (argc >= 3 && !strcmp(argv[1], "message")) {
     drawMessage(c, "\xC3\xA0 point", "Aucune gare", "enregistr\xC3\xA9" "e.", "Maintenez les deux boutons 3 s",
                 "pour ouvrir les r\xC3\xA9glages.");

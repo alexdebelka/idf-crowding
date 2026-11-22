@@ -39,6 +39,7 @@ const char *parsePlace(Input &in, PlaceData &out) {
   filter["schema_version"] = true;
   filter["place"]["id"] = true;
   filter["place"]["name"] = true;
+  filter["place"]["lines"][0]["id"] = true;
   filter["place"]["lines"][0]["name"] = true;
   filter["place"]["lines"][0]["kind"] = true;
   filter["place"]["lines"][0]["color"] = true;
@@ -68,10 +69,15 @@ const char *parsePlace(Input &in, PlaceData &out) {
     // A line can be listed once per operator (e.g. RER B): keep one badge per name and kind.
     const char *nm = l["name"] | "?";
     uint8_t kind = kindOf(l["kind"]);
-    bool dup = false;
+    int found = -1;
     for (int i = 0; i < out.nlines; i++)
-      if (out.lines[i].kind == kind && !strcmp(out.lines[i].name, nm)) dup = true;
-    if (dup) continue;
+      if (out.lines[i].kind == kind && !strcmp(out.lines[i].name, nm)) found = i;
+    const char *lid = l["id"] | "";
+    if (lid[0] && out.nids < MAX_LINE_IDS) {
+      strncpy(out.lineId[out.nids], lid, sizeof out.lineId[0] - 1);
+      out.lineIdBadge[out.nids++] = (uint8_t)(found >= 0 ? found : out.nlines);
+    }
+    if (found >= 0) continue;
     LineInfo &li = out.lines[out.nlines++];
     strncpy(li.name, l["name"] | "?", sizeof li.name - 1);
     li.kind = kindOf(l["kind"]);

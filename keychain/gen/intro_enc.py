@@ -1,9 +1,9 @@
-"""Encode the intro cut as RLE RGB565 frames (apoint/intro_data.h).
+"""Encode the intro cut as RLE RGB565 frames (apoint/src/intro_data.h).
 
 Every frame stands alone (no reference to the previous one), so the keychain can decode a frame
 band by band without a full-frame buffer. Words: a header with the top bit set is a run
 (count in the low 15 bits, then one colour); without it, `count` literal colours follow.
-Run: python3 gen/intro_enc.py <folder of f_*.png at 320x170> apoint/intro_data.h
+Run: python3 gen/intro_enc.py <folder of f_*.png at 320x170> apoint/src/intro_data.h
 """
 
 import glob

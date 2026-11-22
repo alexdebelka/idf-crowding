@@ -78,7 +78,9 @@ apoint/            the sketch
   net.*            Wi-Fi, NTP, HTTPS download (root CAs in certs.h)
   portal.*         setup mode: access point, captive page, /f?ids=...
   aptqr.*          QR codes (Nayuki, MIT)
-  fonts_data.h, rabbit_data.h, intro_data.h   generated (below)
+  src/             generated headers (below): fonts_data.h, rabbit_data.h, intro_data.h,
+                   stations_data.h. In src/ so the Arduino IDE does not open them as tabs
+                   (it took ~7 min to compile with them at the top level)
 gen/
   make_assets.py   Onest glyphs (4-bit) and rabbit masks
   make_stations.py station list of the setup page (from app/public/data/index.json)
@@ -89,9 +91,9 @@ gen/
 Regenerate the assets:
 
 ```sh
-python3 gen/make_assets.py ../app/public/fonts/onest-latin-wght-normal.woff2 <brand>/mark.svg apoint
+python3 gen/make_assets.py ../app/public/fonts/onest-latin-wght-normal.woff2 <brand>/mark.svg apoint/src
 ffmpeg -ss 2.3 -to 5.6 -i <brand>/intro-v2.mp4 -vf "setpts=PTS/1.3,fps=20,scale=320:180,crop=320:170:0:5" /tmp/intro/f_%03d.png
-python3 gen/intro_enc.py /tmp/intro apoint/intro_data.h
+python3 gen/intro_enc.py /tmp/intro apoint/src/intro_data.h
 ```
 
 Check the screens on a computer: `ARDUINOJSON=<ArduinoJson>/src gen/host_render.sh`, then

@@ -1,8 +1,8 @@
-"""Station list for the keychain's setup page (apoint/stations_data.h).
+"""Station list for the keychain's setup page (apoint/src/stations_data.h).
 
 Reads the app's index (app/public/data/index.json, built by `make score`) and writes the id, name
 and line names of every Place, so the setup page can offer a station search without Internet.
-Run: python3 gen/make_stations.py ../app/public/data/index.json apoint/stations_data.h
+Run: python3 gen/make_stations.py ../app/public/data/index.json apoint/src/stations_data.h
 """
 
 import json

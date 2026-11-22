@@ -1,7 +1,7 @@
 // Favourite stations: stored list, toggle, home sections, and the service worker's side.
 import { describe, expect, it } from "vitest";
 import { homeSections } from "../src/components/home/logic";
-import { MAX_FAVOURITES, parseFavourites, recentOnly, toggleIn } from "../src/lib/favourites";
+import { MAX_FAVOURITES, moveIn, parseFavourites, recentOnly, toggleIn } from "../src/lib/favourites";
 
 const p = (id: string) => ({ id, name: `Gare ${id}` });
 
@@ -31,6 +31,23 @@ describe("toggleIn", () => {
     const full = [p("a"), p("b")];
     expect(toggleIn(full, p("c"), 2)).toEqual({ list: full, result: "full" });
     expect(toggleIn(full, p("a"), 2).result).toBe("removed");
+  });
+});
+
+describe("moveIn", () => {
+  const list = [p("a"), p("b"), p("c")];
+  it("swaps with the neighbour", () => {
+    expect(moveIn(list, "b", -1).map((x) => x.id)).toEqual(["b", "a", "c"]);
+    expect(moveIn(list, "b", 1).map((x) => x.id)).toEqual(["a", "c", "b"]);
+  });
+  it("returns the same list at either end or for an unknown id", () => {
+    expect(moveIn(list, "a", -1)).toBe(list);
+    expect(moveIn(list, "c", 1)).toBe(list);
+    expect(moveIn(list, "zz", 1)).toBe(list);
+  });
+  it("does not change the list it was given", () => {
+    moveIn(list, "a", 1);
+    expect(list.map((x) => x.id)).toEqual(["a", "b", "c"]);
   });
 });
 

@@ -38,6 +38,16 @@ export function toggleIn(list: SavedPlace[], place: SavedPlace, max = MAX_FAVOUR
   return { list: [...list, { id: place.id, name: place.name }], result: "added" };
 }
 
+/** Moves a station one place up (-1) or down (+1). Unchanged at either end or when absent. */
+export function moveIn(list: SavedPlace[], id: string, delta: -1 | 1): SavedPlace[] {
+  const i = list.findIndex((p) => p.id === id);
+  const j = i + delta;
+  if (i < 0 || j < 0 || j >= list.length) return list;
+  const out = list.slice();
+  [out[i], out[j]] = [out[j], out[i]];
+  return out;
+}
+
 /** Recent stations that are not favourites, at most `max`. */
 export function recentOnly(recent: SavedPlace[], favourites: SavedPlace[], max: number): SavedPlace[] {
   const fav = new Set(favourites.map((p) => p.id));
@@ -74,6 +84,12 @@ export function toggleFavourite(place: SavedPlace): ToggleResult["result"] | "er
 
 export function removeFavourite(id: string): void {
   write(readFavourites().filter((p) => p.id !== id));
+}
+
+export function moveFavourite(id: string, delta: -1 | 1): void {
+  const list = readFavourites();
+  const next = moveIn(list, id, delta);
+  if (next !== list) write(next);
 }
 
 /** `null` until the device list has been read (first client render). */

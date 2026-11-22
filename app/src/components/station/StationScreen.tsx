@@ -6,6 +6,7 @@ import { useI18n } from "@/components/I18n";
 import { LineBadges } from "@/components/LineBadge";
 import { BarChart, HoursTable, Legend } from "@/components/shared/BarChart";
 import { Header, MethodLink, Screen, StationPicker } from "@/components/shared/Header";
+import { LoadingRabbit } from "@/components/shared/LoadingRabbit";
 import { seedOf } from "@/lib/crowd";
 import { formatDate, formatDayLong, formatDayShort, formatPct } from "@/lib/i18n";
 import { touchSaved } from "@/lib/saved";
@@ -170,22 +171,27 @@ export function StationScreen({ data, bands }: { data: PlaceFile; bands: BandRul
     <TodayButton label={ts.backToToday} accessibleLabel={ts.backToTodayLabel} onClick={() => go(null)} />
   ) : null;
 
+  // Phone: the star sits at the end of the line badges, so the header leaves the station name
+  // all the room it can get. Tablet and computer: in the header, next to the name.
+  const star = <FavouriteButton place={{ id: place.id, name: place.name }} />;
+
   const ground = !mode || mode.kind === "empty" ? "papier" : mode.kind === "date" ? "papier" : mode.facts.ground;
   const accuracy = shownAccuracy(data);
   const accuracyText = accuracy ? tc.stationAccuracy(formatPct(accuracy.wape_pct, lang)) : null;
 
   return (
-    <Screen ground={ground} className={styles.screen}>
+    <Screen ground={ground} className={styles.screen} loader="none">
       <div className={`${styles.page} ${mode ? styles[`mode-${mode.kind === "now" ? mode.facts.ground : mode.kind}`] : ""}`}>
         <Header>
           <StationPicker name={place.name} />
-          <FavouriteButton place={{ id: place.id, name: place.name }} />
+          {layout !== "phone" ? star : null}
           {layout !== "phone" ? pill : null}
           {layout === "computer" ? back : null}
           <MethodLink className={styles.notPhone} />
         </Header>
         <div className={styles.badgesRow}>
           <LineBadges lines={place.lines} label={tc.lines} />
+          {layout === "phone" ? star : null}
         </div>
         {layout === "phone" && pill ? (
           <div className={styles.pillRow}>
@@ -194,7 +200,11 @@ export function StationScreen({ data, bands }: { data: PlaceFile; bands: BandRul
           </div>
         ) : null}
         {!mode ? (
-          <h1 className="sr-only">{place.name}</h1>
+          <>
+            <h1 className="sr-only">{place.name}</h1>
+            {/* Static HTML, and the instant before the device's clock is read. */}
+            <LoadingRabbit size="large" label={tc.loading} />
+          </>
         ) : mode.kind === "empty" ? (
           <p className={styles.emptyNote}>{tc.dayNoData}</p>
         ) : mode.kind === "now" ? (

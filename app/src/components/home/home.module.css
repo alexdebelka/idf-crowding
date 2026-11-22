@@ -705,3 +705,125 @@
 .sheetStage:empty {
   display: none;
 }
+
+/* ---- "Vos gares": edit mode (reorder and remove with buttons) ---- */
+.sectionHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.editToggle {
+  height: 44px;
+  /* 44 px tap target that does not push the tiles down. */
+  margin: -12px -10px -12px 0;
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.editToggle:focus-visible,
+.editBtn:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -4px;
+  border-radius: 12px;
+}
+.editList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.editRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 64px;
+  padding: 10px 8px 10px 20px;
+  border-radius: 20px;
+  background: var(--white);
+  color: var(--nuit);
+  box-shadow: var(--shadow-pill);
+}
+.editName {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.editButtons {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+.editBtn {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.editBtn:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.editRemove {
+  margin-left: 6px;
+  color: var(--ardoise);
+}
+@media (hover: hover) {
+  .editBtn:not(:disabled):hover {
+    background: rgba(14, 17, 22, 0.06);
+  }
+}
+@media (min-width: 700px) {
+  .editToggle {
+    font-size: 17px;
+  }
+  /* One column (the order reads top to bottom), not the tile grid. */
+  .editList {
+    max-width: 560px;
+  }
+}
+
+/* "Envoyer au porte-clés" (src/lib/keychain.ts): a quiet text link under the favourites. */
+.keychainRow {
+  margin: -4px 0 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+.keychainLink {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: inherit;
+  opacity: 0.72;
+  text-underline-offset: 3px;
+}
+.keychainLink:hover {
+  opacity: 1;
+}
+.keychainLink:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 6px;
+  opacity: 1;
+}

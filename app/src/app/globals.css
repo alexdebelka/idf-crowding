@@ -619,3 +619,112 @@ html.splash body::before {
   opacity: 0;
   pointer-events: none;
 }
+
+/* ---- Loading rabbit (components/shared/LoadingRabbit.tsx) ----
+   Shown while the page's scripts are still loading: styles only, no script. One 3 s loop:
+   body, nose, left ear, right ear bounce in; a hold; the ears wind up, then ears, nose and body
+   shrink towards the middle of the rabbit. Lengths inside the keyframes are drawing units. */
+.boot {
+  pointer-events: none;
+  color: var(--ink);
+  /* nothing for the first half second: a fast connection never sees it */
+  opacity: 0;
+  animation: boot-show 0.01s linear 0.5s forwards;
+}
+.boot-mark {
+  display: block;
+  aspect-ratio: 100 / 134;
+  fill: currentColor;
+}
+.boot-large {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding-bottom: 18vh;
+}
+.boot-large .boot-mark {
+  height: 96px;
+}
+.boot-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--label);
+}
+.boot-small {
+  position: fixed;
+  right: calc(18px + env(safe-area-inset-right));
+  bottom: calc(18px + env(safe-area-inset-bottom));
+  z-index: 3;
+}
+.boot-small .boot-mark {
+  height: 46px;
+}
+.boot-part {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: 3s ease-in-out infinite;
+}
+.boot-nose {
+  fill: var(--bg);
+  animation-name: boot-nose;
+}
+.boot-body {
+  animation-name: boot-body;
+}
+.boot-ear-l {
+  animation-name: boot-ear-l;
+}
+.boot-ear-r {
+  animation-name: boot-ear-r;
+}
+@keyframes boot-show {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes boot-body {
+  0% { transform: scale(0); }
+  5% { transform: scale(1.24); }
+  8% { transform: scale(0.9); }
+  11% { transform: scale(1.07); }
+  14%, 76% { transform: scale(1); }
+  80% { transform: scale(1.12); animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.5); }
+  87%, 100% { transform: scale(0); }
+}
+@keyframes boot-nose {
+  0%, 12% { transform: translate(0, 0) scale(0); }
+  16% { transform: translate(0, 0) scale(1.6); }
+  19% { transform: translate(0, 0) scale(0.75); }
+  22% { transform: translate(0, 0) scale(1.18); }
+  25%, 72% { transform: translate(0, 0) scale(1); }
+  75% { transform: translate(0, 0) scale(1.4); animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.5); }
+  81%, 100% { transform: translate(0, -25px) scale(0); }
+}
+@keyframes boot-ear-l {
+  0%, 22% { transform: translate(2px, 20px) rotate(0deg) scale(0, 0); }
+  27% { transform: translate(0, 0) rotate(-9deg) scale(1.12, 1.32); }
+  30% { transform: translate(0, 0) rotate(6deg) scale(1.04, 0.86); }
+  33% { transform: translate(0, 0) rotate(-3deg) scale(0.98, 1.08); }
+  37%, 65% { transform: translate(0, 0) rotate(0deg) scale(1, 1); }
+  68% { transform: translate(0, -3px) rotate(-10deg) scale(0.9, 1.2); }
+  70% { transform: translate(0, 0) rotate(7deg) scale(1.06, 0.94); animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.5); }
+  77%, 100% { transform: translate(14px, 53px) rotate(20deg) scale(0, 0); }
+}
+@keyframes boot-ear-r {
+  0%, 28% { transform: translate(-5px, 20px) rotate(0deg) scale(0, 0); }
+  33% { transform: translate(0, 0) rotate(9deg) scale(1.12, 1.32); }
+  36% { transform: translate(0, 0) rotate(-6deg) scale(1.04, 0.86); }
+  39% { transform: translate(0, 0) rotate(3deg) scale(0.98, 1.08); }
+  43%, 61% { transform: translate(0, 0) rotate(0deg) scale(1, 1); }
+  64% { transform: translate(0, -3px) rotate(10deg) scale(0.9, 1.2); }
+  66% { transform: translate(0, 0) rotate(-7deg) scale(1.06, 0.94); animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.5); }
+  73%, 100% { transform: translate(-17px, 52px) rotate(-20deg) scale(0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .boot-part {
+    animation: none;
+  }
+}

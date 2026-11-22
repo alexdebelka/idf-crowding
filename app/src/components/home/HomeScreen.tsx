@@ -5,13 +5,14 @@ import { useI18n } from "@/components/I18n";
 import { Header, MethodLink, Screen } from "@/components/shared/Header";
 import { shouldAutoOffer, useInstall } from "@/lib/install";
 import { useOnline } from "@/lib/online";
+import { useFavourites } from "@/lib/favourites";
 import { useSaved } from "@/lib/saved";
 import type { BandRule } from "@/lib/state";
 import type { IndexPlace } from "@/lib/types";
 import { DownloadIcon, InstallSheet } from "./InstallSheet";
 import { Search } from "./Search";
 import { Tiles } from "./Tiles";
-import { largestPlaces } from "./logic";
+import { homeSections, largestPlaces } from "./logic";
 import s from "./home.module.css";
 
 const OfflineIcon = (
@@ -32,25 +33,26 @@ export function HomeScreen({ places, bands }: { places: IndexPlace[]; bands: Ban
   const { t } = useI18n();
   const online = useOnline();
   const saved = useSaved();
+  const favourites = useFavourites();
   const install = useInstall();
   const [sheet, setSheet] = useState(false);
   const offered = useRef(false);
 
-  const fallback = saved !== null && saved.length === 0;
   const big = useMemo(() => largestPlaces(places), [places]);
-  const stations = saved === null ? null : fallback ? big : saved;
+  const sections = saved === null || favourites === null ? null : homeSections(favourites, saved, big);
+  const heading = { favourites: t.home.savedHeading, recent: t.home.recentHeading, big: t.home.bigHeading };
 
   // The sheet opens from the button only. Offering it unasked to a returning visitor is an
   // owner decision (not on the canvas): set AUTO_OFFER to true to turn it on.
   const { mode, laterAt } = install;
   useEffect(() => {
     if (!AUTO_OFFER || offered.current || mode == null || saved == null || !online) return;
-    if (shouldAutoOffer(mode, saved.length > 0, laterAt, Date.now())) {
+    if (shouldAutoOffer(mode, saved.length > 0 || (favourites?.length ?? 0) > 0, laterAt, Date.now())) {
       offered.current = true;
       // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time offer once the device is read
       setSheet(true);
     }
-  }, [mode, laterAt, saved, online]);
+  }, [mode, laterAt, saved, favourites, online]);
 
   const closeSheet = () => {
     install.later();
@@ -80,14 +82,15 @@ export function HomeScreen({ places, bands }: { places: IndexPlace[]; bands: Ban
           <Search places={places} offline={!online} />
         </div>
 
-        {stations ? (
-          <section className={s.saved} aria-labelledby="home-saved">
-            <h2 id="home-saved" className={s.sectionTitle}>
-              {fallback ? t.home.bigHeading : t.home.savedHeading}
+        {sections?.map((sec, i) => (
+          <section key={sec.kind} className={s.saved} aria-labelledby={`home-${sec.kind}`}>
+            <h2 id={`home-${sec.kind}`} className={s.sectionTitle}>
+              {heading[sec.kind]}
             </h2>
-            <Tiles stations={stations} bands={bands} online={online} />
+            {i === 0 && sec.kind !== "favourites" ? <p className={s.favHint}>{t.home.favHint}</p> : null}
+            <Tiles stations={sec.stations} bands={bands} online={online} />
           </section>
-        ) : null}
+        ))}
 
         {mode && mode !== "none" ? (
           <div className={s.installRow}>

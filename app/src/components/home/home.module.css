@@ -312,12 +312,21 @@
   font-size: 16px;
   font-weight: 700;
 }
+.favHint {
+  margin-top: -6px;
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.72;
+}
 .tiles {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 @media (min-width: 700px) {
+  .favHint {
+    margin-top: -18px;
+  }
   .saved {
     gap: 28px;
     padding-top: 72px;
@@ -684,4 +693,15 @@
     margin-bottom: 24px;
     border-radius: 32px;
   }
+}
+
+/* Intro animation in the install sheet (owner request, 2026-11-19). */
+.sheetStage {
+  height: 150px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: var(--nuit);
+}
+.sheetStage:empty {
+  display: none;
 }

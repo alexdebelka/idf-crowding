@@ -56,3 +56,17 @@ export function notifyStationOpened(pathname: string): void {
       /* no worker: nothing to tell */
     });
 }
+
+/**
+ * Tells the worker the favourite stations: it keeps them for offline use whatever the recent
+ * list says. Sent when the list changes and on every page load (the worker may have missed one).
+ */
+export function notifyFavourites(ids: string[]): void {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  const clean = ids.filter((id) => /^[A-Za-z0-9_-]{1,32}$/.test(id));
+  navigator.serviceWorker.ready
+    .then((reg) => reg.active?.postMessage({ type: "favourites", ids: clean }))
+    .catch(() => {
+      /* no worker: nothing to tell */
+    });
+}

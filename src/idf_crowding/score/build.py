@@ -1,6 +1,7 @@
 """Build the v0 typical week (Crowding score) and the app's JSON files.
 
     idf-score build
+    idf-score flipper [--days N] [--out PATH]   (file for the Flipper Zero app, score/flipper.py)
 
 Reads data/processed (features_daily, station_profiles, stations) and the stop reference
 in data/raw/idfm/reference (arrets-lignes, referentiel-des-lignes, zones-d-arrets, arrets).
@@ -27,7 +28,7 @@ import polars as pl
 from idf_crowding.config import REPO_ROOT, load_config
 from idf_crowding.features.calendar import load_public_holidays, load_school_holidays
 from idf_crowding.features.stations import last_quarters
-from idf_crowding.score import accuracy, dated, export
+from idf_crowding.score import accuracy, dated, export, flipper
 from idf_crowding.score.places import assign, load_overrides
 from idf_crowding.score.reference import (
     KIND_ORDER,
@@ -35,6 +36,7 @@ from idf_crowding.score.reference import (
     in_scope,
     lambert93_to_wgs84,
     line_info,
+    stop_areas,
     stop_lines,
 )
 from idf_crowding.score.typical import (
@@ -78,6 +80,7 @@ def place_meta(
     stations: pl.DataFrame,
     lines: pl.DataFrame,
     names: dict[str, str],
+    aliases: dict[int, int] | None = None,
 ) -> dict[str, dict[str, Any]]:
     st = {r["station_id"]: r for r in stations.iter_rows(named=True)}
     lines_by_station: dict[int, list[dict[str, Any]]] = {}
@@ -115,6 +118,10 @@ def place_meta(
             "station_ids": sids,
             "lines": sorted(seen.values(), key=_line_key),
         }
+        # only when it differs: the real-time departures route falls back to station_ids
+        areas = stop_areas(sids, aliases or {})
+        if areas != sids:
+            meta[pid]["stop_areas"] = areas
     return meta
 
 
@@ -173,7 +180,7 @@ def build(
     members = members.filter(pl.col("place_id").is_in(refs["place_id"].implode()))
     names = {str(b): n for _, b, n in s.zdc_aliases if n}
     names.update({o.id: o.name for o in overrides})
-    meta = place_meta(members, stations, lines, names)
+    meta = place_meta(members, stations, lines, names, {a: b for a, b, _ in s.zdc_aliases})
     forecast = date_forecasts(paths, end, members, hourly, levels, refs, now)
     acc = accuracy.compute(paths.processed, members, now)
     records = export.place_records(
@@ -225,10 +232,21 @@ def build(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="idf-score", description=__doc__.splitlines()[0])
-    parser.add_argument("command", choices=["build"])
-    parser.parse_args(argv)
+    parser.add_argument("command", choices=["build", "flipper"])
+    parser.add_argument("--days", type=int, default=28, help="flipper: dates in the file")
+    parser.add_argument("--out", type=Path, default=None, help="flipper: output file")
+    args = parser.parse_args(argv)
     config = load_config()
-    build(Paths.from_config(config), ScoreSettings.from_config(config.get("score", {})))
+    paths = Paths.from_config(config)
+    if args.command == "flipper":
+        out = args.out or paths.processed / "flipper" / "a_point.dat"
+        info = flipper.export(paths.app_data, out, args.days)
+        print(
+            f"flipper: {info['places']} places x {info['days']} dates from {info['first']}, "
+            f"{info['bytes'] / 1024:.0f} KB -> {info['path']} (copy to SD: apps_data/a_point/)"
+        )
+        return 0
+    build(paths, ScoreSettings.from_config(config.get("score", {})))
     return 0
 
 

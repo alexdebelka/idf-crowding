@@ -3,9 +3,12 @@
 import { useRef } from "react";
 import styles from "./station.module.css";
 
-/** Date pill ("Aujourd’hui", 44 px, ink fill). Opens the native date picker, limited to the
- *  Place's forecast dates. The visible control is a real button; the date input stays in the
- *  page (under the pill) so the picker opens next to it. */
+/** Date pill ("Aujourd’hui", 44 px, ink fill), limited to the Place's forecast dates.
+ *  The real control is the native date input, laid invisibly over the pill:
+ *  - touch screens: the tap lands on the input and the system opens its own picker (iOS does
+ *    not open a date picker from script, so a button calling `showPicker()` does nothing there);
+ *  - mouse: the input lets the click through to the pill, which opens the picker;
+ *  - keyboard and screen readers: the input is the focusable, labelled control. */
 export function DatePill({
   label,
   accessibleLabel,
@@ -29,12 +32,11 @@ export function DatePill({
       el.showPicker();
     } catch {
       el.focus();
-      el.click();
     }
   };
   return (
     <span className={styles.pillWrap}>
-      <button type="button" className={`pill ${styles.datePill}`} aria-label={accessibleLabel} onClick={open}>
+      <button type="button" className={`pill ${styles.datePill}`} tabIndex={-1} aria-hidden="true" onClick={open}>
         {label}
         <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M6 9l6 6 6-6" />
@@ -44,8 +46,7 @@ export function DatePill({
         ref={input}
         type="date"
         className={styles.dateInput}
-        tabIndex={-1}
-        aria-hidden="true"
+        aria-label={accessibleLabel}
         value={value}
         min={min}
         max={max}

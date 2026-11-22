@@ -1,0 +1,12 @@
+App(
+    appid="a_point",
+    name="a point",
+    apptype=FlipperAppType.EXTERNAL,
+    entry_point="a_point_main",
+    requires=["gui", "storage"],
+    stack_size=4 * 1024,
+    fap_category="Tools",
+    fap_icon="a_point.png",
+    fap_version="0.1",
+    fap_description="Crowding forecast of Ile-de-France rail stations (open data, IDFM, ODbL).",
+)

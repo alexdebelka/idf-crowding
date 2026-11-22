@@ -6,7 +6,7 @@
 /* Bump VERSION when this file's caching layout or logic changes: every cache of this
    worker with another version is deleted on activate. A new deploy of the site does not
    need a bump (pages are network first, hashed files never change). */
-const VERSION = "v1";
+const VERSION = "v4";
 const CACHE_SHELL = "apoint-shell-" + VERSION;
 const CACHE_STATIONS = "apoint-stations-" + VERSION;
 const CACHE_DATA = "apoint-data-" + VERSION;
@@ -16,12 +16,15 @@ const MAX_STATIONS = 8; // the home shows the 4 most recent; keep a few more
 const MAX_STATIC_ENTRIES = 150; // files under /_next/static/ kept in the shell cache (oldest dropped)
 const NETWORK_TIMEOUT_MS = 4000; // network first: after this, a cached copy wins if there is one
 const META_PATH = "/__sw/recent-stations"; // synthetic key, inside the stations cache
+const FAV_PATH = "/__sw/favourite-stations"; // same, for the favourites (never evicted)
+const MAX_FAVOURITES = 12; // as in src/lib/favourites.ts
 
 const PRECACHE_PAGES = ["/", "/a-propos/"];
 const PRECACHE_FILES = [
   "/fonts/onest-latin-wght-normal.woff2",
   "/fonts/onest-latin-ext-wght-normal.woff2",
   "/brand/mark.svg",
+  "/brand/intro.js",
   "/brand/favicon.svg",
   // full payloads read by a client-side link that was not prefetched
   "/index.txt",
@@ -98,6 +101,17 @@ function stationIdFromMessage(data) {
   return STATION_ID.test(data.id) ? data.id : null;
 }
 
+/** The page sends the favourite stations: { type: "favourites", ids: [...] }. Null if invalid. */
+function favouritesFromMessage(data) {
+  if (!data || data.type !== "favourites" || !Array.isArray(data.ids)) return null;
+  const out = [];
+  for (const id of data.ids) {
+    if (typeof id === "string" && STATION_ID.test(id) && !out.includes(id)) out.push(id);
+    if (out.length >= MAX_FAVOURITES) break;
+  }
+  return out;
+}
+
 /** Recent stations list after the user opened `id`: most recent first, no duplicate. */
 function touchRecent(recent, id) {
   return [id].concat(recent.filter((x) => x !== id));
@@ -106,11 +120,12 @@ function touchRecent(recent, id) {
 /**
  * Eviction. `recent` is most recent first, `cachedIds` the station ids that have entries in
  * the cache. Keeps the `max` most recent; purges every cached id that is not kept (the oldest
- * ones, and ids that were only prefetched and never opened).
+ * ones, and ids that were only prefetched and never opened). `pinned` (favourites) are never
+ * purged and do not count towards `max`.
  */
-function planPrune(recent, cachedIds, max) {
+function planPrune(recent, cachedIds, max, pinned) {
   const kept = recent.slice(0, max);
-  const keepSet = new Set(kept);
+  const keepSet = new Set(kept.concat(pinned || []));
   const purge = [];
   for (const id of cachedIds) if (!keepSet.has(id) && !purge.includes(id)) purge.push(id);
   return { recent: kept, purge: purge };
@@ -163,6 +178,23 @@ async function readRecent(cache) {
   }
 }
 
+async function readFavourites(cache) {
+  const hit = await cache.match(self.location.origin + FAV_PATH);
+  if (!hit) return [];
+  try {
+    return favouritesFromMessage({ type: "favourites", ids: await hit.json() }) || [];
+  } catch {
+    return [];
+  }
+}
+
+function writeFavourites(cache, list) {
+  return cache.put(
+    self.location.origin + FAV_PATH,
+    new Response(JSON.stringify(list), { headers: { "content-type": "application/json" } }),
+  );
+}
+
 function writeRecent(cache, list) {
   return cache.put(
     self.location.origin + META_PATH,
@@ -192,19 +224,33 @@ async function fetchAndStore(kind, url, opts) {
 function trackStation(id) {
   return serial(async () => {
     const cache = await openCache("stations");
-    const recent = touchRecent(await readRecent(cache), id);
-    const cachedIds = [];
-    for (const r of await cache.keys()) {
-      const cid = stationIdOf(new URL(r.url).pathname);
-      if (cid) cachedIds.push(cid);
-    }
-    const plan = planPrune(recent, cachedIds, MAX_STATIONS);
-    await writeRecent(cache, plan.recent);
-    for (const r of await cache.keys()) {
-      const cid = stationIdOf(new URL(r.url).pathname);
-      if (cid && plan.purge.includes(cid)) await cache.delete(r);
-    }
+    await prune(cache, touchRecent(await readRecent(cache), id), await readFavourites(cache));
   }).then(() => ensureStationPage(id));
+}
+
+/** The favourites changed: store them, purge what is no longer kept, cache the new ones. */
+function setFavourites(ids) {
+  return serial(async () => {
+    const cache = await openCache("stations");
+    await writeFavourites(cache, ids);
+    await prune(cache, await readRecent(cache), ids);
+  }).then(async () => {
+    for (const id of ids) await ensureStationPage(id);
+  });
+}
+
+async function prune(cache, recent, favourites) {
+  const cachedIds = [];
+  for (const r of await cache.keys()) {
+    const cid = stationIdOf(new URL(r.url).pathname);
+    if (cid) cachedIds.push(cid);
+  }
+  const plan = planPrune(recent, cachedIds, MAX_STATIONS, favourites);
+  await writeRecent(cache, plan.recent);
+  for (const r of await cache.keys()) {
+    const cid = stationIdOf(new URL(r.url).pathname);
+    if (cid && plan.purge.includes(cid)) await cache.delete(r);
+  }
 }
 
 /** What an opened station needs offline: its page (with the files it names), its full payload
@@ -246,7 +292,11 @@ function background(event, route, key, netPromise) {
   const job = netPromise
     .then(async (res) => {
       if (!isCacheable(res)) return;
+      // A page is kept with the files it names: a newer page saved here without its scripts
+      // would, on the next slow or offline launch, be shown with no code behind its buttons.
+      const page = route.strategy === "navigate" ? res.clone() : null;
       await store(route.cache, key, res.clone());
+      if (page) await cacheStaticFiles(await page.text());
       if (route.stationId && route.opened) await trackStation(route.stationId);
     })
     .catch(() => {});
@@ -365,6 +415,8 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("message", (event) => {
   const id = stationIdFromMessage(event.data);
   if (id) event.waitUntil(trackStation(id).catch(() => {}));
+  const favs = favouritesFromMessage(event.data);
+  if (favs) event.waitUntil(setFavourites(favs).catch(() => {}));
 });
 
 self.addEventListener("fetch", (event) => {
@@ -382,6 +434,6 @@ self.addEventListener("fetch", (event) => {
 if (typeof self.__swTest === "function") {
   self.__swTest({
     VERSION, MAX_STATIONS, MAX_STATIC_ENTRIES, NETWORK_TIMEOUT_MS,
-    stationIdOf, stationIdFromMessage, cacheKeyOf, routeFor, touchRecent, planPrune, staticEvictions, isCacheable, staticUrlsIn,
+    MAX_FAVOURITES, stationIdOf, stationIdFromMessage, favouritesFromMessage, cacheKeyOf, routeFor, touchRecent, planPrune, staticEvictions, isCacheable, staticUrlsIn,
   });
 }

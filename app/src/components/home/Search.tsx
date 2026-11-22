@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/components/I18n";
 import { LineBadge } from "@/components/LineBadge";
+import { uniqueLines } from "@/lib/format";
 import { buildEntries, search } from "@/lib/search";
 import type { IndexPlace } from "@/lib/types";
 import { moveActive, stationHref, wantsSearchFocus } from "./logic";
@@ -21,6 +22,21 @@ export function Search({ places, offline }: { places: IndexPlace[]; offline: boo
   const [active, setActive] = useState(-1);
   const [closed, setClosed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // A press inside the list of results: the field loses focus before the tap becomes a click
+  // (Safari gives the link no focus, so the blur names no target). Closing the list at that
+  // moment would remove the row under the finger and the tap would open nothing.
+  const pressing = useRef(false);
+  const press = () => {
+    pressing.current = true;
+    const release = () => {
+      window.removeEventListener("pointerup", release);
+      window.removeEventListener("pointercancel", release);
+      // iOS sends the blur after the finger lifts, just before the click
+      window.setTimeout(() => (pressing.current = false), 500);
+    };
+    window.addEventListener("pointerup", release);
+    window.addEventListener("pointercancel", release);
+  };
   const listId = useId();
   const noteId = useId();
 
@@ -69,6 +85,7 @@ export function Search({ places, offline }: { places: IndexPlace[]; offline: boo
     <div
       className={s.searchWrap}
       onBlur={(e) => {
+        if (pressing.current) return;
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setClosed(true);
       }}
     >
@@ -108,7 +125,7 @@ export function Search({ places, offline }: { places: IndexPlace[]; offline: boo
         </span>
       ) : null}
       {showPanel ? (
-        <div className={s.panel}>
+        <div className={s.panel} onPointerDown={press}>
           {results.length ? (
             <ul id={listId} role="listbox" aria-label={t.home.resultsLabel} className={s.results}>
               {results.map((p, i) => (
@@ -125,7 +142,7 @@ export function Search({ places, offline }: { places: IndexPlace[]; offline: boo
                       {p.town ? <span className={s.rowTown}>{p.town}</span> : null}
                     </span>
                     <span className={s.rowBadges} aria-label={t.common.lines}>
-                      {p.lines.map((l) => (
+                      {uniqueLines(p.lines).map((l) => (
                         <LineBadge key={l.id} line={l} />
                       ))}
                     </span>

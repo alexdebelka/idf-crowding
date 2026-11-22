@@ -115,6 +115,14 @@ def line_info_from(ref: pl.DataFrame) -> pl.DataFrame:
     )
 
 
+def stop_areas(station_ids: list[int], aliases: dict[int, int]) -> list[int]:
+    """ZdC to ask for real-time departures: the Place's data ZdC plus every reference ZdC
+    aliased to one of them (the validation data folds some stations into another ZdC; the
+    real-time source still serves them under their own)."""
+    members = set(station_ids)
+    return sorted(members | {ref for ref, data in aliases.items() if data in members})
+
+
 def apply_aliases(sl: pl.DataFrame, aliases: dict[int, int]) -> pl.DataFrame:
     """Move lines of reference ZdC `from` to data ZdC `to` (see config [score.zdc_aliases])."""
     if not aliases:

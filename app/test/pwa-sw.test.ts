@@ -23,7 +23,9 @@ interface SwApi {
   cacheKeyOf(u: URL): string;
   routeFor(u: URL, r: { method: string; mode: string; hasRange?: boolean }, origin: string): Route;
   touchRecent(recent: string[], id: string): string[];
-  planPrune(recent: string[], cached: string[], max: number): { recent: string[]; purge: string[] };
+  planPrune(recent: string[], cached: string[], max: number, pinned?: string[]): { recent: string[]; purge: string[] };
+  favouritesFromMessage(d: unknown): string[] | null;
+  MAX_FAVOURITES: number;
   staticEvictions(keys: string[], max: number): string[];
   isCacheable(r: unknown): boolean;
   staticUrlsIn(t: string): string[];
@@ -194,5 +196,21 @@ describe("staticUrlsIn", () => {
       '<link rel="stylesheet" href="/_next/static/chunks/0yfg.css"/><script src="/_next/static/chunks/2r4s.js" async></script>' +
       '<script>x("/_next/static/chunks/2r4s.js");y("/fonts/a.woff2")</script>';
     expect([...sw.staticUrlsIn(html)].sort()).toEqual(["/_next/static/chunks/0yfg.css", "/_next/static/chunks/2r4s.js"]);
+  });
+});
+
+describe("favourites in the worker", () => {
+  it("favouritesFromMessage keeps valid ids, once, at most the maximum", () => {
+    expect([...sw.favouritesFromMessage({ type: "favourites", ids: ["a", "a", "../x", 5, "b"] })!]).toEqual(["a", "b"]);
+    expect([...sw.favouritesFromMessage({ type: "favourites", ids: [] })!]).toEqual([]);
+    const many = Array.from({ length: 30 }, (_, i) => String(i));
+    expect(sw.favouritesFromMessage({ type: "favourites", ids: many })).toHaveLength(sw.MAX_FAVOURITES);
+    expect(sw.favouritesFromMessage({ type: "station-opened", id: "a" })).toBeNull();
+    expect(sw.favouritesFromMessage({ type: "favourites", ids: "a" })).toBeNull();
+  });
+  it("planPrune never purges favourites, and they do not count towards the bound", () => {
+    const plan = sw.planPrune(["s1", "s2", "s3"], ["s1", "s2", "s3", "f1", "old"], 2, ["f1"]);
+    expect([...plan.recent]).toEqual(["s1", "s2"]);
+    expect([...plan.purge].sort()).toEqual(["old", "s3"]);
   });
 });

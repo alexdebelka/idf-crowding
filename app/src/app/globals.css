@@ -234,6 +234,32 @@ button {
   height: 44px;
   flex: none;
 }
+.hdr-home {
+  gap: 9px;
+  text-decoration: none;
+  /* The mark alone is 22 px wide: widen the tap target to 44 px without moving it. */
+  min-width: 44px;
+  position: relative;
+  z-index: 2;
+  touch-action: manipulation;
+}
+.hdr-name {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+/* Phone station screens: the station name needs the room, the mark stands alone. */
+@media (max-width: 699px) {
+  .hdr:has(.hdr-station) .hdr-name {
+    display: none;
+  }
+}
+@media (min-width: 700px) {
+  .hdr-name {
+    font-size: 22px;
+  }
+}
 .rabbit {
   display: block;
   height: var(--mark-h);
@@ -280,6 +306,60 @@ button {
   .hdr-link,
   .hdr-station {
     font-size: 17px;
+  }
+}
+
+/* Favourite star (station header): 44 px tap target, filled when the station is in "Vos gares". */
+.fav-btn {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin: 0 -8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.fav-btn:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: -4px;
+  border-radius: 12px;
+}
+.fav-note {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  z-index: 50;
+  max-width: min(90vw, 420px);
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: #0e1116;
+  color: #f6f7f4;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  box-shadow: 0 10px 24px -10px rgba(14, 17, 22, 0.6);
+  transform: translate(-50%, 12px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s, transform 0.18s;
+}
+.fav-note-on {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.ground-nuit .fav-note {
+  background: #f6f7f4;
+  color: #0e1116;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fav-note {
+    transition: none;
   }
 }
 
@@ -510,4 +590,32 @@ button {
     transition: none !important;
     animation: none !important;
   }
+}
+
+/* ---- Launch intro of the installed app (components/pwa/Splash.tsx) ---- */
+html.splash body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: var(--nuit);
+  /* Safety net without script: if the page's code never runs, the cover lifts by itself. */
+  animation: splash-off 0s linear 5s forwards;
+}
+@keyframes splash-off {
+  to {
+    visibility: hidden;
+    pointer-events: none;
+  }
+}
+.splash-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--nuit);
+  transition: opacity 0.3s ease;
+}
+.splash-stage.is-leaving {
+  opacity: 0;
+  pointer-events: none;
 }

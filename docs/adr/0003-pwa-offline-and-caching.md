@@ -9,7 +9,7 @@ Caches (all names carry a `VERSION` constant):
 | Cache | Content | Bound |
 |---|---|---|
 | `apoint-shell-<v>` | `/`, `/a-propos/`, fonts, `/brand/*`, `/icons/*`, files under `/_next/static/` | the newest 150 files under `/_next/static/` (oldest dropped) |
-| `apoint-stations-<v>` | per station: `/p/<id>/`, its Next.js payload files (`index.txt` and the segment files), `/data/places/<id>.json`, plus one small list of the most recent ids | 8 stations (the home shows 4), least recently opened dropped first |
+| `apoint-stations-<v>` | per station: `/p/<id>/`, its Next.js payload files (`index.txt` and the segment files), `/data/places/<id>.json`, plus one small list of the most recent ids | 8 recent stations (the home shows 4) plus up to 12 favourites, never evicted; least recently opened non-favourite dropped first |
 | `apoint-data-<v>` | other files under `/data/` (the index) | a few files |
 
 Strategies (the decisions are pure functions at the top of `sw.js`, tested in `app/test/pwa-sw.test.ts`):
@@ -24,7 +24,11 @@ Strategies (the decisions are pure functions at the top of `sw.js`, tested in `a
 
 A station counts as opened when its page is navigated to, or when the page tells the worker (`RegisterSW` posts `{ type: "station-opened", id }` for every `/p/<id>/` path, which covers client-side links: those never load the page's HTML, so the worker cannot see them). The Place file that the home fetches for its tiles, and payloads prefetched for visible links, do not count. Opening moves the station to the front of the recent list; stations beyond 8 and stations that were only prefetched are purged; and whatever is missing among its page (with the files it names), its full payload and its Place file (the home reads it for the tile) is fetched once, so that a reload offline works and its tile shows its state. A station page embeds its own data (the date forecasts are in the page), so an opened station needs nothing else offline.
 
+**Favourites** (added 2026-11-20). The visitor stars a station to keep it in "Vos gares" (`localStorage` key `favoris`, at most 12, nothing leaves the device). The page posts `{ type: "favourites", ids }` when the list changes and on every load; the worker stores the list beside the recent one, never purges those stations, and fetches whatever is missing for each (as for an opened station). Removing a favourite makes it an ordinary station again: it stays while it is among the 8 most recent. Worker `VERSION` v3.
+
 **Update behaviour.** `sw.js` is served with `max-age=0, must-revalidate` and registered with `updateViaCache: "none"`, so the browser compares it with the network on navigations. A new worker installs (it re-fetches the home, the method page, the fonts and the files they name), takes over at once (`skipWaiting`, `clients.claim`) and deletes every `apoint-*` cache whose name is not the current one. A deploy of the site needs no change in `sw.js`: pages are network first, hashed files never change under one name, data is revalidated. Bump `VERSION` only when the worker's own logic or cache layout changes; this also empties the stations cache (a visitor re-opens the stations they need). Nothing can be stale forever: the worker file is never cached for long, pages and payloads try the network first, data is revalidated on every use, and every cache is bounded or versioned.
+
+**A page is kept with its scripts (worker v4).** Every page stored by the worker (first visit, or a newer copy saved in the background after the 4 s fallback) also stores the `/_next/static/` files it names. Before v4 a newer page could be saved alone; on the next slow or offline launch it was shown with no code behind its buttons. As a second net, an inline script in `<head>` (`components/pwa/recover.ts`) reloads the page once, at most once a minute, when one of its own script files fails to load (a page older than the last deploy). The launch cover of the installed app also lifts by itself after 5 s if no script runs.
 
 ## Cloudflare Workers static assets
 

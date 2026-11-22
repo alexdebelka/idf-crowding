@@ -4,6 +4,7 @@ import { useEffect, useId, useRef } from "react";
 import { useI18n } from "@/components/I18n";
 import { RabbitMark } from "@/components/shared/Header";
 import type { InstallMode } from "@/lib/install";
+import { INTRO_OPTIONS, introReady } from "@/lib/intro";
 import s from "./home.module.css";
 
 const DOWNLOAD = (
@@ -43,6 +44,26 @@ export function InstallSheet({
     };
   }, []);
 
+  // The intro plays in a loop above the buttons; with reduced motion it shows its last frame.
+  const stageRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let handle: { play: () => void; destroy: () => void } | null = null;
+    let gone = false;
+    introReady()
+      .then((api) => {
+        if (gone || !stageRef.current) return;
+        handle = api.mount(stageRef.current, { ...INTRO_OPTIONS, loop: true });
+        handle.play();
+      })
+      .catch(() => {
+        /* offline: the sheet works without the animation */
+      });
+    return () => {
+      gone = true;
+      handle?.destroy();
+    };
+  }, []);
+
   function onKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Escape") {
       e.stopPropagation();
@@ -79,6 +100,7 @@ export function InstallSheet({
             <p className={s.sheetPromise}>{t.common.promise}</p>
           </div>
         </div>
+        <div ref={stageRef} aria-hidden="true" className={s.sheetStage} />
         <p className={s.sheetBody}>{t.home.installBody}</p>
         <div className={s.sheetActions}>
           <button

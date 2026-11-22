@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalize, roundEntries, shownHours } from "../src/lib/format";
+import { normalize, roundEntries, shownHours, uniqueLines } from "../src/lib/format";
 import { defaultDayType } from "../src/lib/time";
 import { buildEntries, search } from "../src/lib/search";
 import type { IndexPlace } from "../src/lib/types";
@@ -53,5 +53,13 @@ describe("format", () => {
     expect(defaultDayType("2026-11-14")).toBe("SAHV");
     expect(defaultDayType("2026-11-15")).toBe("DIJFP");
     expect(defaultDayType("2026-11-12")).toBe("JOHV");
+  });
+});
+
+describe("line badges", () => {
+  it("shows a line once when the reference data lists it under two ids", () => {
+    const l = (id: string, name: string, kind: "rer" | "transilien" | "metro") => ({ id, name, kind });
+    const out = uniqueLines([l("a", "B", "rer"), l("b", "B", "rer"), l("c", "L", "transilien"), l("d", "L", "transilien"), l("e", "1", "metro")]);
+    expect(out.map((x) => x.id)).toEqual(["a", "c", "e"]);
   });
 });

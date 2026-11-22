@@ -1,4 +1,4 @@
-import type { HourRow } from "./types";
+import type { HourRow, Line } from "./types";
 
 /** "08:00" */
 export const hh = (h: number) => `${String(h).padStart(2, "0")}:00`;
@@ -28,4 +28,15 @@ export function roundEntries(n: number): number {
   if (n < 100) return Math.round(n / 5) * 5;
   if (n < 1000) return Math.round(n / 10) * 10;
   return Math.round(n / 100) * 100;
+}
+
+/** One badge per line: the reference data lists some lines under two ids (RER B, Transilien L…). */
+export function uniqueLines(lines: Line[]): Line[] {
+  const seen = new Set<string>();
+  return lines.filter((l) => {
+    const key = `${l.kind}|${l.name}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }

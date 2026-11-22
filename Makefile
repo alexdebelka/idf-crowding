@@ -1,4 +1,4 @@
-.PHONY: setup test lint format check poll status compact backup ingest ingest-plan clean features backtest deep-export deep-export-warmup deep-score score forecast-lgbm forecast-export forecast-combine
+.PHONY: setup test lint format check poll status compact backup ingest ingest-plan clean features backtest deep-export deep-export-warmup deep-score score forecast-lgbm forecast-export forecast-combine flipper
 
 setup:
 	uv sync
@@ -51,6 +51,10 @@ backtest:
 # v0: typical-week Crowding score -> data/processed/typical_week.parquet + app/public/data/*.json
 score:
 	uv run idf-score build
+
+# Flipper Zero: one file with every Place's date forecasts (after `make score`), see flipper/README.md
+flipper:
+	uv run idf-score flipper $(if $(DAYS),--days $(DAYS),)
 
 # Option C: inputs for deep models trained on a GPU elsewhere (notebooks/03_deep_colab.ipynb),
 # then scoring of their forecasts against lgbm

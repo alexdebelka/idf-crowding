@@ -86,6 +86,8 @@ export interface PlaceFile {
     lat?: number | null;
     lon?: number | null;
     station_ids: number[];
+    /** ZdC for real-time departures, only when they differ from station_ids. */
+    stop_areas?: number[];
     lines: Line[];
   };
   reference_level: number;

@@ -279,7 +279,7 @@ no `accuracy` field and `accuracy.json` is not written (a stale one is removed).
   log: Champlan (T12 tram-train, ZdC 486959, ~55 entries a day, data ending 2025-12-13),
   WAPE 15.6 (1 560 %): LightGBM forecast 470 to 4 700 entries a day on average depending on the
   origin (TFT 29 to 61), and the ensemble keeps half of that error. It is outside the app's scope (no metro / RER), so it has
-  no Place file, but it stays in the summary tiles, which cover every scored Counting point.
+  no Place file and is not in the summary tiles either.
   Among the app's Places the largest errors are Magenta (45 %) and Haussmann Saint-Lazare
   (36 %), whose 2026 Q1 level jump is still being checked against the source.
 - Places without a figure on the first run: Saint-Denis – Pleyel (179 scored days) and
@@ -287,8 +287,12 @@ no `accuracy` field and `accuracy.json` is not written (a stale one is removed).
   ensemble log).
 - **Summary (`accuracy.json`)**: the log (variant, lag, weather, model, origins, scored
   period, days since the last data day), the minimum-days rule, the number of Places with a
-  figure and the median and 9th decile of their WAPE, and the tiles:
-  - `station_wape_pct`: WAPE over every scored row of the log (all scored Counting points);
+  figure and the median and 9th decile of their WAPE, and the tiles. The tiles use only the
+  Counting points of the app's Places (metro + RER), so they describe the stations the app
+  shows (owner decision, 2026-11-22: before, they covered every scored Counting point, T12
+  and other non-app stations included; station 10.1 → 10.0 %, network 5.5 → 5.4 %, band
+  0.806 → 0.821 on the first log):
+  - `station_wape_pct`: WAPE over every scored row of the log (app Counting points);
   - `network_wape_pct`: WAPE of the daily network total (sum of scored stations per origin ×
     date);
   - `band.coverage`: share of scored rows inside the calibrated 80 % ensemble band

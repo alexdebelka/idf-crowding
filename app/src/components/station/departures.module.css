@@ -1,0 +1,66 @@
+/* Next departures (real time). Colours follow the screen's ground through --ink / --label. */
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 560px;
+}
+.title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--label);
+}
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.dest {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.times {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.times strong {
+  font-weight: 800;
+}
+.then {
+  font-size: 13px;
+  color: var(--label);
+}
+.more {
+  align-self: flex-start;
+  padding: 6px 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--label);
+  text-decoration: underline;
+  cursor: pointer;
+}
+@media (min-width: 700px) {
+  .row {
+    font-size: 16px;
+  }
+}

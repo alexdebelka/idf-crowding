@@ -170,6 +170,10 @@ export function MethodPage({ bands, dataPeriod, accuracy, forecast }: MethodPage
           <p>{m.limitsTrend}</p>
         </Section>
 
+        <Section id="m-realtime" title={m.realtimeTitle}>
+          <p>{m.realtimeBody}</p>
+        </Section>
+
         <footer className={s.footer}>
           <p>{t.common.attribution}</p>
           <p className={s.muted}>{t.common.independent}</p>

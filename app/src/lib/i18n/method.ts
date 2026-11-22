@@ -62,6 +62,9 @@ const fr = {
   limitsTrend:
     "La croissance de la fréquentation sur un an est prolongée : si elle ralentit, la prévision peut être trop haute.",
 
+  realtimeTitle: "Prochains départs",
+  realtimeBody:
+    "Les prochains départs affichés sur la page d’une gare viennent en temps réel de la plateforme PRIM d’Île-de-France Mobilités (« Prochains passages », licence ODbL). Ce site les relaie et ne les garde que 30 secondes ; votre appareil ne parle qu’à ce site et rien de lui n’est transmis à la plateforme. Ils ne servent pas à la prévision d’affluence.",
   traffic: "Aucun cookie, aucun script de mesure d’audience.",
 };
 
@@ -118,6 +121,9 @@ const en: MethodStrings = {
     "24, 25, 31 December and 1 January are corrected from the same days in earlier years; their hours are less certain.",
   limitsTrend:
     "The past year’s growth in ridership is carried forward: if it slows, the forecast may be too high.",
+  realtimeTitle: "Next departures",
+  realtimeBody:
+    "The next departures shown on a station page come live from Île-de-France Mobilités’ PRIM platform (“Prochains passages”, ODbL licence). This site relays them and keeps them for 30 seconds only; your device only talks to this site and nothing about it is passed on to the platform. They are not used in the crowding forecast.",
   traffic: "No cookies, no analytics script.",
 };
 

@@ -105,11 +105,13 @@ describe("_headers", () => {
 
 describe("wrangler.jsonc", () => {
   const cfg = JSON.parse(read("wrangler.jsonc").replace(/^\s*\/\/.*$/gm, "").replace(/\s\/\/ .*$/gm, ""));
-  it("serves the static export and nothing else", () => {
+  it("serves the static export; the Worker script only answers /api/* (ADR 0004)", () => {
     expect(cfg.assets.directory).toBe("./out");
     expect(cfg.assets.html_handling).toBe("auto-trailing-slash");
     expect(cfg.assets.not_found_handling).toBe("404-page");
-    expect(cfg.main).toBeUndefined(); // no Worker script
-    expect(cfg.assets.run_worker_first).toBeUndefined();
+    expect(cfg.main).toBe("./worker/index.ts");
+    expect(cfg.assets.binding).toBe("ASSETS");
+    // pages, data and the service worker stay static asset requests: _headers applies to them
+    expect(cfg.assets.run_worker_first).toEqual(["/api/*"]);
   });
 });

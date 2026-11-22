@@ -36,6 +36,7 @@ from idf_crowding.score.reference import (
     in_scope,
     lambert93_to_wgs84,
     line_info,
+    stop_areas,
     stop_lines,
 )
 from idf_crowding.score.typical import (
@@ -79,6 +80,7 @@ def place_meta(
     stations: pl.DataFrame,
     lines: pl.DataFrame,
     names: dict[str, str],
+    aliases: dict[int, int] | None = None,
 ) -> dict[str, dict[str, Any]]:
     st = {r["station_id"]: r for r in stations.iter_rows(named=True)}
     lines_by_station: dict[int, list[dict[str, Any]]] = {}
@@ -116,6 +118,10 @@ def place_meta(
             "station_ids": sids,
             "lines": sorted(seen.values(), key=_line_key),
         }
+        # only when it differs: the real-time departures route falls back to station_ids
+        areas = stop_areas(sids, aliases or {})
+        if areas != sids:
+            meta[pid]["stop_areas"] = areas
     return meta
 
 
@@ -174,7 +180,7 @@ def build(
     members = members.filter(pl.col("place_id").is_in(refs["place_id"].implode()))
     names = {str(b): n for _, b, n in s.zdc_aliases if n}
     names.update({o.id: o.name for o in overrides})
-    meta = place_meta(members, stations, lines, names)
+    meta = place_meta(members, stations, lines, names, {a: b for a, b, _ in s.zdc_aliases})
     forecast = date_forecasts(paths, end, members, hourly, levels, refs, now)
     acc = accuracy.compute(paths.processed, members, now)
     records = export.place_records(

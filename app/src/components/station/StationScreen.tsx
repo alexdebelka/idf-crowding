@@ -34,6 +34,7 @@ import { CHART_HOURS, serviceNow } from "@/lib/time";
 import type { PlaceFile } from "@/lib/types";
 import { BackLayer, CrowdBand } from "./Crowd";
 import { DatePill, TodayButton } from "./DatePill";
+import { NextDepartures } from "./NextDepartures";
 import {
   calmScene,
   chosenDate,
@@ -274,13 +275,15 @@ function NowView({
   // Phone and tablet: the crowd fills the height left under the content (measured once laid out).
   const slot = useRef<HTMLDivElement>(null);
   const [space, setSpace] = useState<number | undefined>(undefined);
+  // Rows of the real-time block: it loads after the first layout and changes the height above the crowd.
+  const [departureRows, setDepartureRows] = useState(0);
   const { lang } = useI18n();
   useLayoutEffect(() => {
     const el = slot.current;
     if (!el || layout === "computer") return;
     const top = el.getBoundingClientRect().top + window.scrollY;
     setSpace(Math.round(window.innerHeight - top));
-  }, [layout, width, lang, f.band, f.hour, accuracyText]);
+  }, [layout, width, lang, f.band, f.hour, accuracyText, departureRows]);
 
   const seed = seedOf(`${data.place.id}:${f.band}:${layout}`);
   const scene = useMemo(
@@ -321,6 +324,7 @@ function NowView({
     </h1>
   );
   const summary = <p className={styles.summary}>{nb(nowSummary(tc, f))}</p>;
+  const departures = <NextDepartures placeId={data.place.id} lines={data.place.lines} onRows={setDepartureRows} />;
   const crowd = calm
     ? scene && <CrowdBand layer={scene.front} tone="calm" id="front" rabbit={scene.rabbit} />
     : full && <CrowdBand layer={full} tone="night" id="crowd" className={layout === "computer" ? styles.bandBehind : undefined} />;
@@ -342,6 +346,7 @@ function NowView({
           {scene?.back ? <BackLayer layer={scene.back} id="back" /> : null}
           {chart}
         </div>
+        {departures}
         {table}
         <div style={{ marginTop: calm ? 6 : -COMPUTER_FULL_OVERLAP }} className={styles.bandWrap}>
           {crowd}
@@ -362,6 +367,7 @@ function NowView({
           {legend}
           {comparison ? <p className={styles.comparison}>{nb(comparison)}</p> : null}
           {note}
+          {departures}
         </div>
         {table}
         <div ref={slot} className={styles.bandSlot}>
@@ -380,6 +386,7 @@ function NowView({
       <div className={styles.legendBlock}>
         {legend}
         {note}
+        {departures}
       </div>
       {table}
       <div ref={slot} className={styles.bandSlot}>

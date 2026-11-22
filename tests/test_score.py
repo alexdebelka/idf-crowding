@@ -226,6 +226,15 @@ def test_zdc_aliases_move_lines_to_data_zdc():
     assert s.zdc_aliases == ((1, 2, "X"),)
 
 
+def test_stop_areas_add_the_reference_zdc_aliased_to_a_member():
+    from idf_crowding.score.reference import stop_areas
+
+    aliases = {474151: 71264, 63284: 63278}
+    assert stop_areas([71264], aliases) == [71264, 474151]
+    assert stop_areas([71410], aliases) == [71410]
+    assert stop_areas([63278, 71264], {}) == [63278, 71264]
+
+
 def test_line_info_kinds_and_active_only():
     ref = pl.DataFrame(
         {

@@ -13,6 +13,13 @@ const fr = {
   stationPrefix: (name: string) => `${name} : `,
   /** Headline of the chosen date, read with the date ("Jeudi 24 décembre : Plus chargé…"). */
   datePrefix: (day: string) => `${day} : `,
+  /** Next departures in real time (the block under the chart). */
+  departuresTitle: "Prochains départs, en temps réel",
+  minutes: (m: number) => `${m}\u00a0min`,
+  approaching: "à l’approche",
+  atPlatform: "à quai",
+  departuresAll: (n: number) => `Voir les ${n} directions`,
+  departuresLess: "Voir moins",
   /** Favourite star in the header. */
   favAdd: "Ajouter à vos gares",
   favRemove: "Retirer de vos gares",
@@ -33,6 +40,12 @@ const en: StationStrings = {
   backToTodayLabel: "Back to today",
   stationPrefix: (name: string) => `${name}: `,
   datePrefix: (day: string) => `${day}: `,
+  departuresTitle: "Next departures, live",
+  minutes: (m: number) => `${m}\u00a0min`,
+  approaching: "approaching",
+  atPlatform: "at platform",
+  departuresAll: (n: number) => `Show all ${n} directions`,
+  departuresLess: "Show fewer",
   favAdd: "Add to your stations",
   favRemove: "Remove from your stations",
   favAdded: "Added to your stations.",

@@ -599,6 +599,14 @@ html.splash body::before {
   inset: 0;
   z-index: 999;
   background: var(--nuit);
+  /* Safety net without script: if the page's code never runs, the cover lifts by itself. */
+  animation: splash-off 0s linear 5s forwards;
+}
+@keyframes splash-off {
+  to {
+    visibility: hidden;
+    pointer-events: none;
+  }
 }
 .splash-stage {
   position: fixed;

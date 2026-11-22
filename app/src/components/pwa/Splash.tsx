@@ -47,7 +47,8 @@ export function Splash() {
     introReady()
       .then((api) => {
         window.clearTimeout(giveUp);
-        if (done || !host.current) return;
+        if (done) return;
+        if (!host.current) return finish();
         handle = api.mount(host.current, INTRO_OPTIONS);
         const t0 = performance.now();
         const frame = (now: number) => {

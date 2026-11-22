@@ -6,7 +6,7 @@
 /* Bump VERSION when this file's caching layout or logic changes: every cache of this
    worker with another version is deleted on activate. A new deploy of the site does not
    need a bump (pages are network first, hashed files never change). */
-const VERSION = "v3";
+const VERSION = "v4";
 const CACHE_SHELL = "apoint-shell-" + VERSION;
 const CACHE_STATIONS = "apoint-stations-" + VERSION;
 const CACHE_DATA = "apoint-data-" + VERSION;
@@ -292,7 +292,11 @@ function background(event, route, key, netPromise) {
   const job = netPromise
     .then(async (res) => {
       if (!isCacheable(res)) return;
+      // A page is kept with the files it names: a newer page saved here without its scripts
+      // would, on the next slow or offline launch, be shown with no code behind its buttons.
+      const page = route.strategy === "navigate" ? res.clone() : null;
       await store(route.cache, key, res.clone());
+      if (page) await cacheStaticFiles(await page.text());
       if (route.stationId && route.opened) await trackStation(route.stationId);
     })
     .catch(() => {});

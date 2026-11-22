@@ -62,6 +62,7 @@
         "lat": {"type": ["number", "null"], "minimum": 47, "maximum": 50},
         "lon": {"type": ["number", "null"], "minimum": 0.5, "maximum": 4},
         "station_ids": {"type": "array", "minItems": 1, "items": {"type": "integer"}},
+        "stop_areas": {"type": "array", "minItems": 1, "items": {"type": "integer"}, "description": "ZdC to ask for real-time departures when they differ from station_ids (reference ZdC folded into a data ZdC)"},
         "lines": {"type": "array", "items": {"$ref": "#/$defs/line"}}
       }
     },

@@ -62,6 +62,15 @@ cd app && npm ci
 npx wrangler login            # or set CLOUDFLARE_API_TOKEN (Workers Scripts: Edit)
 ```
 
+Next departures (ADR 0004) need the PRIM key as a Worker secret, once:
+
+```sh
+npx wrangler secret put PRIM_API_KEY     # paste the key when asked; it is never written to a file
+```
+
+Without the secret the site works and the departures block stays hidden. Check after a deploy:
+`curl https://<site>/api/next/71264`.
+
 Each refresh (after new IDFM data, `make ingest clean features`):
 
 ```sh

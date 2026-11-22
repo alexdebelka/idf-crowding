@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { I18nProvider } from "@/components/I18n";
 import { RegisterSW } from "@/components/pwa/RegisterSW";
+import { CHUNK_RECOVER } from "@/components/pwa/recover";
 import { SPLASH_BOOT, Splash } from "@/components/pwa/Splash";
 
 export const metadata: Metadata = {
@@ -29,6 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="fr">
       <head>
+        <script dangerouslySetInnerHTML={{ __html: CHUNK_RECOVER }} />
         <script dangerouslySetInnerHTML={{ __html: SPLASH_BOOT }} />
         <link
           rel="preload"

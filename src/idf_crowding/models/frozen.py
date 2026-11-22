@@ -6,7 +6,9 @@ including the test period of a backtest. At an origin (first day of the forecast
                       (the monthly share of the month before; past months are unchanged
                       because each month's share only uses that month's validations)
     station_type      k-means on the most recent profile periods that ended before the
-                      origin, covering >= 12 months (4 quarters, or quarters + a semester)
+                      origin, covering >= 12 months (4 quarters, or quarters + a semester);
+                      stations missing from some of them: nearest centre, from profile
+                      periods that ended before the origin only
 """
 
 from __future__ import annotations
@@ -75,10 +77,12 @@ def freeze_short_pass_share(df: pl.DataFrame, origin: date) -> pl.DataFrame:
 def frozen_station_types(
     profiles: pl.DataFrame, origin: date, months: int = 12, min_periods: int = 2
 ) -> pl.DataFrame:
-    periods = periods_before(profiles["period"].unique().to_list(), origin, months)
+    published = profiles["period"].unique().to_list()
+    periods = periods_before(published, origin, months)
     if len(periods) < min_periods:
         raise ValueError(f"only {len(periods)} profile periods before {origin}: {periods}")
-    return station_types(profiles, periods=periods)
+    ended = [p for p in published if PERIOD.match(p) and period_bounds(p)[1] <= origin]
+    return station_types(profiles, periods=periods, fallback_periods=ended)
 
 
 def apply_frozen(df: pl.DataFrame, origin: date, profiles: pl.DataFrame) -> pl.DataFrame:

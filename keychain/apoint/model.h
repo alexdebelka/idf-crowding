@@ -8,7 +8,8 @@
 #define MAX_LINES 12
 #define MAX_DATES 100
 #define MAX_FAVS 12
-#define PLACE_MAGIC 0x41505431u  // "APT1"
+#define MAX_LINE_IDS 16
+#define PLACE_MAGIC 0x41505432u  // "APT2" (APT1 had no line ids: such files are fetched again)
 
 enum LineKind : uint8_t { KIND_METRO, KIND_RER, KIND_TRAM, KIND_TRAIN };
 enum DayType : uint8_t { DT_JOHV, DT_JOVS, DT_SAHV, DT_SAVS, DT_DIJFP, DT_N };
@@ -25,6 +26,11 @@ struct PlaceData {
   char name[80];  // UTF-8
   uint8_t nlines;
   LineInfo lines[MAX_LINES];
+  // Line ids of the Place file (e.g. "C01374") and the badge each one is drawn with: the real-time
+  // departures name lines by id, and one badge can stand for two ids (RER B, one per operator).
+  uint8_t nids;
+  char lineId[MAX_LINE_IDS][12];
+  uint8_t lineIdBadge[MAX_LINE_IDS];
   uint8_t typicalMask;  // bit per DayType present
   uint16_t typical[DT_N][24];
   uint16_t ndates;
@@ -40,3 +46,5 @@ int32_t dayFromIso(const char *s);
 // its day type (same fallbacks as the app). Returns false when the Place has neither.
 bool scoresFor(const PlaceData &p, int32_t day, uint16_t out[24], bool *forecast = nullptr);
 int dayTypeIndex(const char *code);
+// Badge of a line id of the Place, or null.
+const LineInfo *lineById(const PlaceData &p, const char *id);

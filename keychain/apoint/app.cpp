@@ -4,6 +4,7 @@
 //
 // Controls
 //   Button 1 (BOOT): next station.        Button 2 (KEY): today / tomorrow.
+//   Button 2 twice: next departures (real time, needs Wi-Fi); any press goes back.
 //   Hold one button 3 s: closing animation, then off (any press turns it on, with the intro).
 //   Hold both buttons 3 s: setup mode (Wi-Fi and favourite stations from the phone).
 //   No press for 20 s: sleep. After sleep the keychain is locked: the last screen shows,
@@ -63,6 +64,7 @@ static void backlight(bool on) { digitalWrite(PIN_LCD_BL, on ? HIGH : LOW); }
 
 RTC_DATA_ATTR static bool rtcClosed = false;  // switched off by the user (not just asleep)
 RTC_DATA_ATTR static bool rtcLocked = false;
+RTC_DATA_ATTR static bool rtcArrivals = false;  // asleep on the departures screen
 
 enum Mode { MODE_STATION, MODE_SETUP };
 static Mode mode = MODE_STATION;
@@ -78,6 +80,13 @@ static PlaceData *place = nullptr;  // current favourite, as stored
 static bool placeLoaded = false;
 static uint32_t lastInput = 0;
 static int drawnHour = -1;
+
+// Next departures screen
+static bool arrivals = false;
+static bool arrivalsQuick = false;  // opened by a wake from sleep: falls back to crowding without Wi-Fi
+static Departures dep;               // last answer (status DEP_LOADING until one comes)
+static uint32_t depAt = 0;           // millis() when it came
+static uint32_t depAsked = 0;        // millis() of the last request
 
 // ---- Clock ----
 
@@ -146,9 +155,51 @@ static void paintStation() {
   drawnHour = n.valid ? n.hour : -1;
 }
 
+static void paintArrivals() {
+  if (favCount == 0) {
+    paintStation();
+    return;
+  }
+  ensurePlace();
+  int32_t elapsed = dep.status == DEP_OK ? (int32_t)((millis() - depAt) / 1000) : 0;
+  Now n = clockNow();
+  drawnHour = n.valid ? n.hour : -1;
+  ArrivalsView v{placeLoaded ? place : nullptr, favIds[favIndex].c_str(), &dep, elapsed, locked, lockDots};
+  drawArrivals(canvas, v);
+}
+
+static void paintCurrent() {
+  if (arrivals)
+    paintArrivals();
+  else
+    paintStation();
+}
+
 static void drawStationScreen() {
   ensurePlace();
-  show(paintStation);
+  show(paintCurrent);
+}
+
+// ---- Next departures ----
+
+static void askDepartures() {
+  depAsked = millis();
+  net::startDepartures(favIds[favIndex], true);
+}
+
+static void openArrivals(bool quick) {
+  if (favCount == 0) return;
+  arrivals = true;
+  arrivalsQuick = quick;
+  memset(&dep, 0, sizeof dep);
+  dep.status = DEP_LOADING;
+  askDepartures();
+}
+
+static void closeArrivals() {
+  arrivals = false;
+  arrivalsQuick = false;
+  net::releaseDeparturesWifi();
 }
 
 // ---- Setup screen ----
@@ -227,6 +278,7 @@ static void playClose() {
 static void goToSleep(bool closed) {
   rtcClosed = closed;
   rtcLocked = !closed;  // asleep: locked on wake; switched off: plain start with the intro
+  rtcArrivals = !closed && arrivals;  // quick view = the screen it was left on
   store::setScreen(favIndex, tomorrow);
   backlight(false);
   if (band565) panel->displayOff();
@@ -276,7 +328,7 @@ static void paintHold() {
   if (mode == MODE_SETUP)
     paintSetup();
   else
-    paintStation();
+    paintCurrent();
   drawHoldBar(canvas, holdProgress, holdNight);
 }
 
@@ -301,6 +353,11 @@ static void click(uint8_t which) {
   }
   if (locked) {
     lockPress();
+    return;
+  }
+  if (arrivals) {  // any press goes back to the crowding screen
+    closeArrivals();
+    redraw();
     return;
   }
   if (which == 1) {
@@ -334,10 +391,11 @@ static void pollButtons() {
       } else if (bothHeld) {
         // released after a two-button hold: nothing more
       } else if (held < 600) {
-        if (i == 1 && ARRIVALS_ENABLED && mode == MODE_STATION && !locked) {
+        if (i == 1 && ARRIVALS_ENABLED && mode == MODE_STATION && !locked && !arrivals && favCount > 0) {
           if (pending2 && now - pending2 < DOUBLE_PRESS_MS) {
             pending2 = 0;
-            // next arrivals: next step (ADR 0004 route /api/next/<id>)
+            openArrivals(false);
+            redraw();
           } else {
             pending2 = now;
           }
@@ -458,10 +516,12 @@ void setup() {
   bool skipIntro = store::skipIntroOnce();
   if (fromSleep && !rtcClosed) {
     locked = rtcLocked;  // quick view of the last screen
+    if (rtcArrivals && ARRIVALS_ENABLED && store::wifiSsid().length()) openArrivals(true);
   } else {
     locked = false;
     rtcLocked = false;
     rtcClosed = false;
+    rtcArrivals = false;
     if (!skipIntro) playIntro();
   }
 
@@ -504,6 +564,21 @@ void loop() {
     placeLoaded = false;
     if (!holdShown) redraw();
   }
+  // Next departures: a new answer, the minutes recounted every 10 s, a refresh every 30 s.
+  if (net::departuresFinished() && arrivals) {
+    dep = net::departuresSnapshot();
+    depAt = millis();
+    if (dep.status == DEP_NO_WIFI && arrivalsQuick) closeArrivals();  // quick view: crowding instead
+    if (!holdShown) redraw();
+  }
+  if (arrivals) {
+    static uint32_t lastCount = 0;
+    if (dep.status == DEP_OK && now - lastCount > 10000) {
+      lastCount = now;
+      if (!holdShown) redraw();
+    }
+    if (!net::departuresRunning() && now - depAsked > ARRIVALS_REFRESH_MS) askDepartures();
+  }
   // New hour: the "now" bar moves.
   static uint32_t lastTick = 0;
   if (now - lastTick > 5000) {
@@ -512,10 +587,10 @@ void loop() {
     if (n.valid && n.hour != drawnHour && !holdShown) redraw();
   }
   if (now - lastInput > SLEEP_AFTER_MS && !b1.down && !b2.down && !pending2) {
-    if (net::syncRunning()) {
+    if (net::syncRunning() || net::departuresRunning()) {
       backlight(false);  // finish the download screen-off, then sleep
       uint32_t t0 = millis();
-      while (net::syncRunning() && millis() - t0 < 60000) delay(50);
+      while ((net::syncRunning() || net::departuresRunning()) && millis() - t0 < 60000) delay(50);
     }
     goToSleep(false);
   }

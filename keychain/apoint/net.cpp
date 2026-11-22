@@ -88,14 +88,93 @@ int syncPlaces(int *total) {
   return ok;
 }
 
+// ---- Next departures ----
+
+static Departures depShared;  // last answer, read by the main loop through departuresSnapshot()
+static portMUX_TYPE depMux = portMUX_INITIALIZER_UNLOCKED;
+static volatile bool depRunning = false, depFinished = false, depKeepWifi = false;
+static String depId;
 static volatile bool running = false, finished = false;
+
+static uint8_t fetchDepartures(const String &id, Departures &out) {
+  WiFiClientSecure client;
+  client.setCACert(ROOT_CAS);
+  client.setTimeout(10);
+  HTTPClient http;
+  http.useHTTP10(true);
+  http.setTimeout(10000);
+  String path = String(NEXT_PATH) + id;
+  if (!http.begin(client, SITE_HOST, 443, path, true)) return out.status = DEP_ERROR;
+  http.addHeader("Accept", "application/json");
+  int code = http.GET();
+  if (code != 200) {
+    Serial.printf("departures %s: HTTP %d\n", id.c_str(), code);
+    http.end();
+    memset(&out, 0, sizeof out);
+    return out.status = DEP_ERROR;
+  }
+  uint8_t st = parseDepartures(http.getStream(), out);
+  http.end();
+  Serial.printf("departures %s: status %d, %d rows\n", id.c_str(), st, out.n);
+  return st;
+}
+
+static void depTask(void *) {
+  static Departures d;
+  while (running) delay(50);  // let a running sync finish first (they share the Wi-Fi)
+  memset(&d, 0, sizeof d);
+  if (!connect(WIFI_TIMEOUT_MS)) {
+    d.status = DEP_NO_WIFI;
+  } else {
+    if (!clockValid()) syncClock(4000);
+    fetchDepartures(depId, d);
+  }
+  if (!depKeepWifi) disconnect();
+  portENTER_CRITICAL(&depMux);
+  memcpy(&depShared, &d, sizeof d);
+  portEXIT_CRITICAL(&depMux);
+  depRunning = false;
+  depFinished = true;
+  vTaskDelete(nullptr);
+}
+
+void startDepartures(const String &placeId, bool keepWifi) {
+  if (depRunning) return;
+  depId = placeId;
+  depKeepWifi = keepWifi;
+  depRunning = true;
+  depFinished = false;
+  xTaskCreatePinnedToCore(depTask, "next", 12288, nullptr, 1, nullptr, 0);
+}
+
+bool departuresRunning() { return depRunning; }
+
+bool departuresFinished() {
+  if (!depFinished) return false;
+  depFinished = false;
+  return true;
+}
+
+Departures departuresSnapshot() {
+  Departures d;
+  portENTER_CRITICAL(&depMux);
+  memcpy(&d, &depShared, sizeof d);
+  portEXIT_CRITICAL(&depMux);
+  return d;
+}
+
+void releaseDeparturesWifi() {
+  depKeepWifi = false;
+  if (!depRunning && !running) disconnect();
+}
+
 
 static void task(void *) {
   if (connect(WIFI_TIMEOUT_MS)) {
     syncClock(6000);
     syncPlaces(nullptr);
   }
-  disconnect();
+  if (!depKeepWifi && !depRunning) disconnect();  // a departures request waiting keeps it
   running = false;
   finished = true;
   vTaskDelete(nullptr);

@@ -214,7 +214,9 @@ def test_station_types_named_by_morning_share():
     rows = []
     for sid, peak in [(1, 7), (2, 7), (3, 12), (4, 12), (5, 18), (6, 18)]:
         rows += profile_rows(sid, peak, periods)
-    rows += profile_rows(7, 7, ["2025Q2"])  # not in the last 4 quarters -> no type
+    rows += profile_rows(7, 7, ["2025Q2"])  # not in the last 4 quarters: its latest profile
+    rows += profile_rows(8, 18, ["2026Q1", "2026Q2"])  # new station: the quarters it has
+    rows += profile_rows(9, 12, ["2025Q4"]) + profile_rows(9, 18, ["2015S1"])  # most recent
     t = station_types(pl.DataFrame(rows))
     got = dict(zip(t["station_id"].to_list(), t["station_type"].to_list(), strict=True))
     assert got == {
@@ -224,8 +226,32 @@ def test_station_types_named_by_morning_share():
         4: "mixed",
         5: "destination",
         6: "destination",
+        7: "origin",
+        8: "destination",
+        9: "mixed",
     }
     assert t["station_type_periods"][0] == "2025Q3,2025Q4,2026Q1,2026Q2"
+
+
+def test_partial_stations_do_not_move_the_clusters():
+    periods = ["2025Q3", "2025Q4", "2026Q1", "2026Q2"]
+    rows = []
+    for sid, peak in [(1, 7), (2, 8), (3, 12), (4, 13), (5, 18), (6, 17)]:
+        rows += profile_rows(sid, peak, periods)
+    full = station_types(pl.DataFrame(rows))
+    rows += profile_rows(7, 10, ["2026Q2"])
+    more = station_types(pl.DataFrame(rows))
+    assert more.filter(pl.col("station_id") != 7).equals(full)
+    assert more.filter(pl.col("station_id") == 7)["station_type"].item() is not None
+
+
+def test_station_without_any_profile_stays_untyped():
+    periods = ["2025Q3", "2025Q4", "2026Q1", "2026Q2"]
+    rows = []
+    for sid, peak in [(1, 7), (2, 7), (3, 12), (4, 12), (5, 18), (6, 18)]:
+        rows += profile_rows(sid, peak, periods)
+    t = station_types(pl.DataFrame(rows), fallback_periods=["2025Q3"])
+    assert 7 not in t["station_id"].to_list()
 
 
 def test_build_end_to_end_without_and_with_downloads(tmp_path):

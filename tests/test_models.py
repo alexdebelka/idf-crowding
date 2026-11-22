@@ -154,6 +154,19 @@ def test_station_types_ignore_profiles_after_origin():
     assert dict(after.select("station_id", "am_share_7_10").iter_rows())[1] < am[1]
 
 
+def test_partial_station_types_use_only_profiles_before_origin():
+    prof = profiles()
+    # station 7 opens late: one quarter before the origin, one after (evening peak)
+    prof = pl.concat(
+        [prof, pl.DataFrame(profile_rows(7, 7, ["2025Q2"]) + profile_rows(7, 18, ["2025Q3"]))]
+    )
+    before = frozen_station_types(prof, date(2025, 7, 1))
+    assert dict(before.select("station_id", "station_type").iter_rows())[7] == "origin"
+    # station 8 has profiles only after the origin: no type
+    prof = pl.concat([prof, pl.DataFrame(profile_rows(8, 7, ["2025Q3"]))])
+    assert 8 not in frozen_station_types(prof, date(2025, 7, 1))["station_id"].to_list()
+
+
 def test_station_types_need_enough_periods():
     with pytest.raises(ValueError):
         frozen_station_types(profiles(periods=["2025Q2"]), date(2025, 7, 1))

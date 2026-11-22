@@ -98,7 +98,7 @@ as explicit rows with a null target. A source that is not downloaded gives null 
 | `is_strike_2019` | 2019-12-05 to 2020-01-19 (pension-reform strike) |
 | weather | Open-Meteo daily for Paris (one grid cell), latest download; `precip_mm`, `snow_cm`, `precip_hours`, `tmax_c`, `tmin_c` |
 | `short_pass_share` | Share of `short_passes` in all network validations of the date's month (2025 ticket change); after the last published month: last value; before the first: first value |
-| `station_type` | k-means (k = 3) on JOHV hourly shares of the last 4 published quarters; clusters named by share of entries 7–10 h: highest `origin`, lowest `destination`, middle `mixed`. Null without a profile in all 4 quarters |
+| `station_type` | k-means (k = 3) on JOHV hourly shares of the last 4 published quarters; clusters named by share of entries 7–10 h: highest `origin`, lowest `destination`, middle `mixed`. Stations without a profile in all 4 quarters (new stations, stations missing from some files) are assigned to the nearest cluster centre from their own profile: mean of the quarters they have, else their most recent published period; they do not move the centres. Null only without any profile |
 | `quality_flag`, `network_ratio` | From `quality/`: missing / low / high; network total ÷ its rolling weekday median |
 
 Caveat for backtests: `short_pass_share` and `station_type` are computed from data that
@@ -116,7 +116,7 @@ Rolling origin, time splits only. Rules in `src/idf_crowding/models/`.
 | Closure | Station share of network entries that day < 0.4 × its median share on the same day group (working day / Saturday / Sunday-holiday) over the previous 365 days (≥ 20 such days). Past days only, so it is valid for training rows; catches long closures that the centred-median `low` flag misses. Forecasts assume normal service: planned works are to be shown as warnings |
 | Scored rows | Clean rows where every model has a prediction (a baseline needs history at that station: otherwise `no_baseline`) |
 | `short_pass_share` at origin | Dates ≥ origin get the value of the last month before the origin |
-| `station_type`, `am_share_7_10` at origin | k-means on the most recent profile periods that ended before the origin, until they cover ≥ 12 months (4 quarters; quarters + a semester, or 2 semesters, before mid-2024) |
+| `station_type`, `am_share_7_10` at origin | k-means on the most recent profile periods that ended before the origin, until they cover ≥ 12 months (4 quarters; quarters + a semester, or 2 semesters, before mid-2024). Stations missing from some of those periods: nearest centre, using only periods that ended before the origin |
 | Weather | Observed (not forecast). Fitting without weather changed WAPE by 0.001, so the variant is off by default (`weather_variant`) |
 | `naive_4w` | Same weekday, mean of the clean days of the last 4 weeks before the origin |
 | `daytype_12m` | Per station and day type, mean of the clean days of the last 365 days |

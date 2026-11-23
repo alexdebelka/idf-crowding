@@ -53,6 +53,7 @@ from idf_crowding.features.calendar import (
 )
 from idf_crowding.features.weather import load_weather
 from idf_crowding.models import backtest as bt
+from idf_crowding.models import breaks as brk
 from idf_crowding.models import gbm, growth, intervals
 from idf_crowding.models import special_days as sd
 from idf_crowding.models import weather as wx
@@ -200,6 +201,8 @@ def lgbm_forecast(
         raise ValueError(f"issue date {issue} outside [{cutoff}, {end}): ingest a new quarter?")
     data = bt.prepare(ext, cfg)
     w = apply_frozen(data, cutoff, profiles)
+    if cfg.count_breaks:
+        w, _ = brk.apply(w, brk.from_config(), cutoff)
     train = w.filter((pl.col("date") < cutoff) & pl.col("exclude").is_null())
     fut = w.filter(pl.col("date").is_between(issue, end, closed="left"))
     model = gbm.fit(train, cfg.gbm)

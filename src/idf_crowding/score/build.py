@@ -28,6 +28,7 @@ import polars as pl
 from idf_crowding.config import REPO_ROOT, load_config
 from idf_crowding.features.calendar import load_public_holidays, load_school_holidays
 from idf_crowding.features.stations import last_quarters
+from idf_crowding.models import breaks
 from idf_crowding.score import accuracy, dated, export, flipper
 from idf_crowding.score.places import assign, load_overrides
 from idf_crowding.score.reference import (
@@ -156,6 +157,12 @@ def build(
 ) -> list[dict[str, Any]]:
     now = now or datetime.now(UTC)
     features = pl.read_parquet(paths.processed / "features_daily.parquet")
+    # Counting breaks (models/breaks.py): the typical week's 12 months on the latest scale.
+    features, bf = breaks.apply(
+        features, breaks.from_config(), features["date"].max() + timedelta(days=1), exclude_col=None
+    )
+    if bf:
+        log("score: counting breaks applied: " + ", ".join(f"{k} x{v:.2f}" for k, v in bf.items()))
     profiles = pl.read_parquet(paths.processed / "station_profiles.parquet")
     stations = pl.read_parquet(paths.processed / "stations.parquet")
 

@@ -50,6 +50,7 @@ import numpy as np
 import polars as pl
 
 from idf_crowding.models import backtest as bt
+from idf_crowding.models import breaks as brk
 from idf_crowding.models import intervals
 from idf_crowding.models import weather as wx
 from idf_crowding.models.frozen import apply_frozen
@@ -110,6 +111,8 @@ def origin_inputs(
     c = cfg.cutoff(origin)
     end = origin + timedelta(days=cfg.horizon)
     w = apply_frozen(data.filter(pl.col("date") < end), c, profiles)
+    if cfg.count_breaks:
+        w, _ = brk.apply(w, brk.from_config(), c)
     past = w.filter(pl.col("date") < c)
     clean = past.filter(pl.col("exclude").is_null())
 

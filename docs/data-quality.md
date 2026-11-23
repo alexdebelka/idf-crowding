@@ -83,6 +83,30 @@ not comparable across this break without a correction.
 
 These flags are used later to exclude days from training and from the Reference level.
 
+## Counting breaks (`models/breaks.py`, `config.toml` `[breaks]`)
+- **Finding (2026-11-23)**: on 2026-01-13 the SNCF stops of Gare du Nord (stop 308, ZdC 71410),
+  Haussmann Saint-Lazare (343, 73688) and Magenta (490, 478733) jump from one day to the next to
+  about 1.8×, 1.8× and 2.5× their share of network entries on working days; 2026-01-12 is in
+  between. The rise is in every ticket group (Navigo passes, Imagine R, Améthyste, short passes),
+  the RATP stop of Gare du Nord (318) does not move, and the level holds through 2026-06. Not
+  demand: a change in what is counted at these stops (cause not documented; IDFM to be asked).
+  Not the end of cardboard tickets (sales stopped on 2025-11-05, cardboard accepted on the rail
+  network until autumn 2026): that would raise short passes across the network, not double the
+  entries of pass holders at three stops.
+- **Rule** at a data cutoff c (no data ≥ c used): factor = median working-day (JOHV, JOVS) share
+  of network entries in [settled, min(c, settled + 91 days)) / the same in [start − 91 days,
+  start), known once at least 10 such days exist after the break. When known, entries dated
+  before `start` × factor (history on the new scale) and the switch day (2026-01-12) left out
+  (`exclude = "count_break"`; `n_entries` null in `score`). Before it is known: data unchanged.
+  Applied in the backtest (`count_breaks = true`), the production LightGBM fit, the TFT export
+  and the typical week of `score`. Factors at cutoff 2026-07-01: 1.835 / 1.818 / 2.542.
+- **Backtest** (lag 0, the 4 origins after the break, 2026-02 → 2026-05, LightGBM): the three
+  stations WAPE 0.073 → 0.056 and bias −5.0 % → −0.4 % (Gare du Nord 0.063 → 0.052, Haussmann
+  0.096 → 0.072, Magenta 0.103 → 0.054); other stations 0.0681 → 0.0679; network total
+  0.0327 → 0.0330 (refit noise).
+- Growth extrapolation (`models/growth.py`) reads the network total unadjusted: windows that
+  straddle the break see about +1 % more network growth than demand. Left as is (small).
+
 ## Features (`idf-features build` → `data/processed/features_daily.parquet`)
 One row per station × date, target `n_entries`. Station-days flagged `missing` are added
 as explicit rows with a null target. A source that is not downloaded gives null columns

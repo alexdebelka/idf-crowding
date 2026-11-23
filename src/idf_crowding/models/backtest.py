@@ -45,6 +45,7 @@ import polars as pl
 
 from idf_crowding.config import load_config
 from idf_crowding.models import baselines, gbm, intervals
+from idf_crowding.models import breaks as brk
 from idf_crowding.models import weather as wx
 from idf_crowding.models.closures import is_closure
 from idf_crowding.models.frozen import add_months, apply_frozen
@@ -72,6 +73,7 @@ class BacktestConfig:
     weather_mode: str = "observed"  # "observed" | "production" (climatology after forecast)
     forecast_days: int = 16  # days covered by a weather forecast at issue time
     quantile_models: bool = True  # LightGBM 10 % / 90 % fits (quantile and cqr bands)
+    count_breaks: bool = True  # models/breaks.py: history put on the new scale after a break
     gbm: gbm.GBMConfig = field(default_factory=gbm.GBMConfig)
 
     def __post_init__(self):
@@ -109,6 +111,7 @@ class BacktestConfig:
             weather_mode=c.get("weather_mode", cls.weather_mode),
             forecast_days=c.get("forecast_days", cls.forecast_days),
             quantile_models=c.get("quantile_models", cls.quantile_models),
+            count_breaks=c.get("count_breaks", cls.count_breaks),
             gbm=gcfg,
         )
 
@@ -132,6 +135,7 @@ _NEW_DEFAULTS = {
     "weather_mode": "observed",
     "forecast_days": 16,
     "quantile_models": True,
+    "count_breaks": False,  # added 2026-11-23: runs before it had no break rule
 }
 
 
@@ -218,6 +222,7 @@ def run_origin(
     origin: date,
     cfg: BacktestConfig,
     weather: pl.DataFrame | None = None,
+    breaks: list[brk.Break] | None = None,
 ) -> OriginResult:
     """Forecast origin .. origin + horizon - 1 from data dated < cfg.cutoff(origin).
     `weather` = daily weather since the source starts (climatology in production mode;
@@ -226,6 +231,8 @@ def run_origin(
     end = origin + timedelta(days=cfg.horizon)
     window = data.filter(pl.col("date") < end)
     window = apply_frozen(window, c, profiles)
+    if cfg.count_breaks and breaks:
+        window, _ = brk.apply(window, breaks, c)
     train = window.filter((pl.col("date") < c) & pl.col("exclude").is_null())
     test = with_horizon(window.filter(pl.col("date") >= origin), origin)
     if cfg.weather_mode == "production":
@@ -381,7 +388,7 @@ def run_origins(
     todo = [o for o in origs if o in only] if only else origs
     for o in todo:
         t0 = time.time()
-        r = run_origin(data, profiles, o, cfg, weather)
+        r = run_origin(data, profiles, o, cfg, weather, brk.from_config())
         d = origin_dir(paths, o, cfg)
         d.mkdir(parents=True, exist_ok=True)
         r.predictions.write_parquet(d / "predictions.parquet")

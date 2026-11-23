@@ -94,6 +94,8 @@ weather_mode = "observed"  # "production": observed for forecast_days, then clim
 forecast_days = 16
 quantile_models = true  # LightGBM 10/90 % fits for the quantile / cqr bands
 
+count_breaks = true     # models/breaks.py: history put on the new scale after a counting break
+
 [backtest.lightgbm]
 objective = "tweedie"   # or "log1p"
 num_boost_round = 600
@@ -107,6 +109,16 @@ active_days = 28        # stations with a clean day in the last 28 days before t
 calib_lag = 120         # bands from the backtest variant lag120_prod
 calib_deep_dir = "deep_colab/lag120_prod/outputs"  # its TFT outputs (relative to data_dir)
 growth_window = 182      # LightGBM x year-on-year growth per weekday class over the last 182 days (0 = off)
+
+[breaks]
+# Counting breaks (models/breaks.py, docs/data-quality.md "Counting breaks"): station_id,
+# first day not on the old scale, first day fully on the new scale. Found in the data, not
+# in a source: SNCF stops jump from one day to the next in every ticket group.
+stations = [
+  [71410, "2026-01-12", "2026-01-13"],   # Gare du Nord (SNCF stop 308)
+  [73688, "2026-01-12", "2026-01-13"],   # Haussmann Saint-Lazare
+  [478733, "2026-01-12", "2026-01-13"],  # Magenta
+]
 
 [score]
 # v0 Crowding score, typical week (score/, docs/data-quality.md "Score").
